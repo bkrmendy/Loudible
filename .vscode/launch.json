@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:NativeMac}",
+            "name": "Debug AudibleExporter",
+            "target": "AudibleExporter",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug AudibleExporter"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:NativeMac}",
+            "name": "Release AudibleExporter",
+            "target": "AudibleExporter",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release AudibleExporter"
+        }
+    ]
+}

@@ -1,0 +1,9 @@
+// FFmpeg's headers and libraries, from Vendor/ffmpeg (the -I and -L flags are in Package.swift).
+// Only the C bridge includes these headers; Swift talks to FFmpegBridge.
+module CFFmpegHeaders [system] {
+    header "shim.h"
+    link "avformat"
+    link "avcodec"
+    link "avutil"
+    export *
+}

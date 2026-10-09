@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Keys the generated Info.plist cannot express (INFOPLIST_KEY_ takes no arrays); Xcode merges the rest in. -->
+<plist version="1.0">
+<dict>
+	<key>LSArchitecturePriority</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+</dict>
+</plist>

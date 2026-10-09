@@ -1,0 +1,20 @@
+# SwiftPM build output and local package state
+.build/
+.swiftpm/
+
+# App bundle from Scripts/build-app.sh
+build/
+
+# FFmpeg source tarball and LGPL build from Scripts/build-ffmpeg.sh (re-created on demand)
+Vendor/
+
+# Xcode: App/AudibleExporter.xcodeproj is committed; per-user state is not
+xcuserdata/
+DerivedData/
+
+# Editors: share the Swift extension's launch configs, keep personal settings local
+.vscode/*
+!.vscode/launch.json
+
+# macOS
+.DS_Store
