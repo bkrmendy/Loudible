@@ -39,9 +39,9 @@ import TestSupport
 
     func context(
         downloaded: Bool = false, exported: Bool = false, inLibrary: Bool = true,
-        manifest: Bool = true, folder: Bool = true, signedIn: Bool = true
+        manifest: Bool = true, signedIn: Bool = true
     ) -> BookMenu.Context {
-        BookMenu.Context(isDownloaded: downloaded, isExported: exported, isInLibrary: inLibrary, hasManifest: manifest, hasExportFolder: folder, isSignedIn: signedIn)
+        BookMenu.Context(isDownloaded: downloaded, isExported: exported, isInLibrary: inLibrary, hasManifest: manifest, isSignedIn: signedIn)
     }
 
     func actions(jobs: [ExportJob] = [], _ context: BookMenu.Context) -> [BookAction] {
@@ -88,8 +88,6 @@ import TestSupport
         let notInLibrary = export(context(downloaded: true, inLibrary: false))
         #expect(notInLibrary?.isEnabled == false)
         #expect(notInLibrary?.disabledReason == "This book is no longer in your library.")
-
-        #expect(export(context(downloaded: true, folder: false))?.disabledReason == "Choose an export folder first.")
 
         let noKeysSignedOut = export(context(downloaded: true, manifest: false, signedIn: false))
         #expect(noKeysSignedOut?.isEnabled == false)

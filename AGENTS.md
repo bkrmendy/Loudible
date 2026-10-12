@@ -53,7 +53,7 @@ source Scripts/env.sh && swift run Loudible   # run for development
 | `Loudible` (executable) and the Xcode app target | Shells that call `Launcher.main()`. Nothing else. |
 
 Views come in pairs: a pure *content* view (`AccountPopoverContent`, `LibraryGridContent`,
-`ExportButtonContent`, `LoginSheetContent`, …) that takes values, bindings and closures, and a
+`BookTile`, `LoginSheetContent`, …) that takes values, bindings and closures, and a
 thin wrapper that maps a view model onto it and turns actions into `Task { await model… }`.
 Previews and snapshots use the content views; keep new views to that split.
 
@@ -90,9 +90,7 @@ Core or Presentation behind a protocol, implement it in an adapter, and wire it 
    writes `<state>.png` for every `PreviewState` (about 25 s for all) into that folder. Use a
    scratch directory, not the repo. The window is never shown on screen (its capture is
    byte-identical to a visible one), but it needs a logged-in macOS session. Popovers and sheets
-   are rendered as their content views in a plain window. Known limitation: the capture is
-   empty whenever the Export button has its accent-tinted glass (`exportButtonReady`,
-   `exportButtonRunning`, or a window with a selection or running jobs). The harness is
+   are rendered as their content views in a plain window. The harness is
    `Tests/TestSupport/Snapshot.swift`; the test is `Tests/PresentationTests/SnapshotTests.swift`,
    skipped unless `SNAPSHOT_PATH` is set.
 
@@ -112,9 +110,9 @@ SHA-256), and update the `61.*` libavformat check in `env.sh` and the dylib name
 
 ## Runtime state (for manual testing)
 - Credentials: one Keychain item, `Loudible.AudibleSession`.
-- Export folder: `UserDefaults` key `ExportDestinationPath`.
-- Kept downloads: `~/Documents/Loudible/` (`CompositionRoot.downloadsFolder`), named
-  `Title [ASIN].aaxc`/`.aax`. A book is "downloaded" when a non-hidden audio file there carries
+- Kept downloads and exports: `~/Documents/Loudible/` (`CompositionRoot.downloadsFolder`), named
+  `Title [ASIN].aaxc`/`.aax` and `Title [ASIN].m4b`. There is no export folder setting; the old
+  `ExportDestinationPath` default is removed at launch. A book is "downloaded" when a non-hidden audio file there carries
   `[ASIN]`; written as hidden `.….partial` files first, which are swept at launch.
 - Download manifests (keys, chapters, metadata) and covers:
   `~/Library/Application Support/<bundle id>/Downloads/<ASIN>.json|.cover`, mode 0600. A manifest

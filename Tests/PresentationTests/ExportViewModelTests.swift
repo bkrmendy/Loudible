@@ -10,12 +10,10 @@ import TestSupport
     let store = InMemoryCredentialStore(Fixtures.session())
     let converter = MockConverter()
     let downloader = MockDownloader()
-    let destination: TemporaryDirectory
     let work: TemporaryDirectory
     let downloads: LocalDownloads
 
     init() throws {
-        destination = try TemporaryDirectory("vm-destination")
         work = try TemporaryDirectory("vm-work")
         downloads = LocalDownloads(
             folder: work.url.appendingPathComponent("Downloads", isDirectory: true),
@@ -34,7 +32,7 @@ import TestSupport
         let app = AppViewModel(
             session: SessionViewModel(auth: auth),
             library: LibraryViewModel(service: LibraryService(api: api, auth: auth)),
-            export: ExportViewModel(queue: queue),
+            export: ExportViewModel(queue: queue, exportFolder: downloads.folder),
             downloads: downloads
         )
         await app.start()
@@ -42,54 +40,42 @@ import TestSupport
     }
 
     @Test func signedInStartLoadsLibrary() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
+        defer { work.cleanUp() }
         let (app, _) = try await makeApp()
         #expect(app.session.isSignedIn)
         #expect(app.library.books.map(\.asin) == ["B1", "B2"])
     }
 
-    @Test func exportRequiresSelectionFolderAndSignIn() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
-        let (app, _) = try await makeApp()
-        #expect(!app.canExport)
-        app.library.toggleSelection("B1")
-        #expect(!app.canExport)
-        app.export.destinationFolder = destination.url
-        #expect(app.canExport)
-        #expect(!app.export.canExport(app.library.selectedBooks, isSignedIn: false))
+    /// Exports both library books, one after the other.
+    func exportAll(_ app: AppViewModel) async {
+        for book in app.library.books { await app.export.exportOne(book) }
     }
 
-    @Test func runsExportAndReportsProgress() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
+    @Test func exportsIntoTheDownloadsFolder() async throws {
+        defer { work.cleanUp() }
         let gate = AsyncGate()
         converter.handler.withLock { $0 = { request in await gate.wait(); try Data().write(to: request.output) } }
         let (app, queue) = try await makeApp()
-        app.library.setSelection(["B1", "B2"])
-        app.export.destinationFolder = destination.url
-        await app.exportSelection()
+        await exportAll(app)
 
         try await waitUntil { await app.export.isRunning }
-        #expect(app.export.canCancel)
-        #expect(!app.export.canChooseFolder)
-        #expect(!app.canExport)
-        #expect(app.export.statusText == "Exporting 1 of 2…")
-
         await gate.open()
         await queue.waitUntilFinished()
-        try await waitUntil { await !app.export.isRunning }
-        #expect(app.export.fractionCompleted == 1)
-        #expect(app.export.statusText == "2 exported")
-        #expect(app.canExport)
+        try await waitUntil { await app.exportedFiles.count == 2 }
+        #expect(!app.export.isRunning)
+        #expect(app.exportedFiles.values.allSatisfy {
+            $0.deletingLastPathComponent().standardizedFileURL == downloads.folder.standardizedFileURL
+        })
+        // The M4B files are not mistaken for downloads.
+        #expect(app.downloadedFiles.keys.sorted() == ["B1", "B2"])
     }
 
     @Test func cancelRemovesAllBooks() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
+        defer { work.cleanUp() }
         let gate = AsyncGate()
         converter.handler.withLock { $0 = { request in await gate.wait(); try Task.checkCancellation(); try Data().write(to: request.output) } }
         let (app, queue) = try await makeApp()
-        app.library.setSelection(["B1", "B2"])
-        app.export.destinationFolder = destination.url
-        await app.exportSelection()
+        await exportAll(app)
         try await waitUntil { converter.requests.current.count == 1 }
         let cancelling = Task { await app.export.cancel() }
         await gate.open()
@@ -97,12 +83,10 @@ import TestSupport
         await queue.waitUntilFinished()
         #expect(!app.export.isRunning)
         #expect(app.export.jobs.isEmpty)
-        #expect(app.export.statusText == nil)
-        #expect(app.canExport)
     }
 
     @Test func cancellingOneBookKeepsExportingTheOthers() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
+        defer { work.cleanUp() }
         let gate = AsyncGate()
         converter.handler.withLock {
             $0 = { request in
@@ -111,32 +95,29 @@ import TestSupport
             }
         }
         let (app, queue) = try await makeApp()
-        app.library.setSelection(["B1", "B2"])
-        app.export.destinationFolder = destination.url
-        await app.exportSelection()
+        await exportAll(app)
         try await waitUntil { converter.requests.current.count == 1 }
         let first = try #require(app.export.jobs.first)
-        #expect(app.export.canCancel(first))
-        await app.export.cancel(first)
+        await app.export.cancel(jobID: first.id)
         await gate.open()
         await queue.waitUntilFinished()
         try await waitUntil { await !app.export.isRunning }
-        #expect(app.export.statusText == "1 exported, 1 cancelled")
-        #expect(!app.export.canCancel(app.export.jobs[1]))
+        #expect(app.export.jobs.first?.state == .cancelled)
+        try await waitUntil { await app.exportedFiles.keys.sorted() == ["B2"] }
     }
 
     @Test func unavailableFolderIsReported() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
+        defer { work.cleanUp() }
+        // A file where the downloads folder should be.
+        try Data().write(to: downloads.folder)
         let (app, _) = try await makeApp()
-        app.library.setSelection(["B1"])
-        app.export.destinationFolder = destination.url.appendingPathComponent("gone")
-        await app.exportSelection()
-        #expect(app.export.errorMessage?.contains("not available") == true)
+        await app.export.exportOne(app.library.books[0])
+        #expect(app.export.errorMessage?.contains("not writable") == true)
         #expect(!app.export.isRunning)
     }
 
     @Test func signInAgainResumesPausedExport() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
+        defer { work.cleanUp() }
         let renewed = Locked(false)
         api.licenseHandler.withLock {
             $0 = { asin, session in
@@ -147,24 +128,23 @@ import TestSupport
         api.refreshHandler.withLock { $0 = { _ in throw ExporterError.authenticationRequired } }
         api.registerHandler.withLock { $0 = { _, _ in renewed.withLock { $0 = true }; return Fixtures.session(accessToken: "fresh") } }
         let (app, queue) = try await makeApp()
-        app.library.setSelection(["B1"])
-        app.export.destinationFolder = destination.url
-        await app.exportSelection()
+        await app.export.exportOne(app.library.books[0])
 
         try await waitUntil { await app.export.isWaitingForAuthentication }
         try await waitUntil { await app.session.needsReauthentication }
-        #expect(app.export.statusText == "Paused: sign in to Audible to continue.")
+        #expect(app.export.notice == "Paused: sign in to Audible to continue.")
         #expect(app.library.books.count == 2) // rows stay while re-authenticating
 
         await app.session.signIn()
         await app.session.completeSignIn(with: Fixtures.callbackURL())
         await queue.waitUntilFinished()
         try await waitUntil { await !app.export.isRunning }
-        #expect(app.export.statusText == "1 exported")
+        #expect(app.export.notice == nil)
+        try await waitUntil { await app.exportedFiles.keys.sorted() == ["B1"] }
     }
 
     @Test func signOutClearsLibrary() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
+        defer { work.cleanUp() }
         let (app, _) = try await makeApp()
         app.library.toggleSelection("B1")
         await app.session.signOut()
@@ -183,7 +163,7 @@ import TestSupport
     }
 
     @Test func downloadedBooksThatLeftTheLibraryStayVisible() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
+        defer { work.cleanUp() }
         try keepDownload(Fixtures.book("B1", title: "Book B1"))
         try keepDownload(Fixtures.book("GONE", title: "Returned"))
         let (app, _) = try await makeApp()
@@ -195,15 +175,10 @@ import TestSupport
         #expect(app.status(for: Fixtures.book("B2")) == .none)
         app.library.searchText = "returned"
         #expect(app.library.visibleBooks.map(\.asin) == ["GONE"])
-
-        // Selected, it is still left out of the toolbar export.
-        app.export.destinationFolder = destination.url
-        app.library.setSelection(["GONE"])
-        #expect(!app.canExport)
     }
 
     @Test func rescanDropsDeletedFilesAndTheirManifests() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
+        defer { work.cleanUp() }
         try keepDownload(Fixtures.book("GONE", title: "Returned"))
         let (app, _) = try await makeApp()
         #expect(app.library.books.map(\.asin) == ["B1", "B2", "GONE"])
@@ -215,7 +190,7 @@ import TestSupport
     }
 
     @Test func downloadFromMenuUpdatesStatusAndMenu() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
+        defer { work.cleanUp() }
         let gate = AsyncGate()
         downloader.handler.withLock { $0 = { _, destination in await gate.wait(); try Data().write(to: destination) } }
         let (app, queue) = try await makeApp()
@@ -224,8 +199,6 @@ import TestSupport
 
         await app.perform(.download, on: book)
         try await waitUntil { await app.status(for: book) == .running(.download, progress: 0.5 * 0.96 + 0.02) }
-        #expect(app.export.statusText == "Downloading 1 of 1…")
-        #expect(app.export.activityTitle == "Downloading")
         guard case .cancel(_, .download) = app.menuItems(for: book).first?.action else {
             Issue.record("expected Cancel Download"); return
         }
@@ -234,29 +207,26 @@ import TestSupport
         await queue.waitUntilFinished()
         // Finishing a job triggers a rescan.
         try await waitUntil { await app.status(for: book) == .downloaded }
-        #expect(app.export.statusText == "1 downloaded")
         #expect(app.menuItems(for: book).map(\.action) == [.export, .showDownload, .deleteDownload])
     }
 
-    @Test func statusTextCountsByKind() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
+    @Test func downloadAndExportRunTogether() async throws {
+        defer { work.cleanUp() }
         let gate = AsyncGate()
         downloader.handler.withLock { $0 = { _, destination in await gate.wait(); try Data().write(to: destination) } }
         let (app, queue) = try await makeApp()
-        app.export.destinationFolder = destination.url
         await app.export.download([app.library.books[0]])
         await app.export.exportOne(app.library.books[1])
-        #expect(app.export.activityTitle == "Working")
-        #expect(app.export.statusText == "Working on 1 of 2…")
+        #expect(app.export.activeJobCount == 2)
         await gate.open()
         await queue.waitUntilFinished()
         try await waitUntil { await !app.export.isRunning }
-        #expect(app.export.statusText == "1 downloaded, 1 exported")
+        try await waitUntil { await app.status(for: app.library.books[0]) == .downloaded }
         try await waitUntil { await app.status(for: app.library.books[1]) == .exported }
     }
 
     @Test func failureStaysUntilTheNextAttempt() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
+        defer { work.cleanUp() }
         api.licenseHandler.withLock { $0 = { asin, _ in throw ExporterError.licenseDenied(asin: asin, reason: "not owned") } }
         let (app, queue) = try await makeApp()
         let book = app.library.books[0]
@@ -279,12 +249,10 @@ import TestSupport
     }
 
     @Test func deleteDownloadKeepsTheExport() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
+        defer { work.cleanUp() }
         try keepDownload(Fixtures.book("B1", title: "Book B1"))
-        try Data("m4b".utf8).write(to: destination.url.appendingPathComponent("Book B1 [B1].m4b"))
+        try Data("m4b".utf8).write(to: downloads.folder.appendingPathComponent("Book B1 [B1].m4b"))
         let (app, _) = try await makeApp()
-        app.export.destinationFolder = destination.url
-        await app.rescan()
         #expect(app.status(for: app.library.books[0]) == .exported)
 
         await app.deleteDownload(app.library.books[0])
@@ -295,7 +263,7 @@ import TestSupport
     }
 
     @Test func signOutCancelsJobsAndKeepsFinishedFiles() async throws {
-        defer { destination.cleanUp(); work.cleanUp() }
+        defer { work.cleanUp() }
         downloader.handler.withLock {
             $0 = { source, destination in
                 // B2 only ends by being cancelled.

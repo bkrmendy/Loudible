@@ -3,10 +3,9 @@ import LoudibleCore
 import LoudiblePresentation
 import SwiftUI
 
-/// The library as a cover grid; account, search, refresh, and export live in the toolbar.
+/// The library as a cover grid; account, search, and refresh live in the toolbar.
 struct ContentView: View {
     let model: AppViewModel
-    @State private var isShowingProgress = false
     @State private var pendingDelete: Audiobook?
 
     var body: some View {
@@ -48,7 +47,7 @@ struct ContentView: View {
                 messages: [
                     model.session.errorMessage, model.library.errorMessage, model.export.errorMessage,
                 ].compactMap { $0 },
-                notices: [model.library.marketplaceNotice].compactMap { $0 }
+                notices: [model.export.notice, model.library.marketplaceNotice].compactMap { $0 }
             )
         }
         .confirmationDialog(
@@ -63,12 +62,7 @@ struct ContentView: View {
             Text("The exported M4B is not affected.")
         }
         .removingToolbarTitle()
-        // While the progress sheet is up, the sign-in sheet is presented on top of it instead.
-        .loginSheet(for: model.session, isEnabled: !isShowingProgress)
-        .sheet(isPresented: $isShowingProgress) {
-            ExportProgressSheet(model: model) { isShowingProgress = false }
-                .loginSheet(for: model.session, isEnabled: true)
-        }
+        .loginSheet(for: model.session)
     }
 
     private var isSignedOutAndEmpty: Bool {
@@ -97,19 +91,6 @@ struct ContentView: View {
                 .disabled(!model.library.canRefresh)
             }
         }
-        // The export button draws its own capsule, so it opts out of the toolbar's shared glass
-        // background; the fixed spacer keeps it apart from Refresh.
-        if #available(macOS 26, *) {
-            ToolbarSpacer(.fixed, placement: .primaryAction)
-            ToolbarItem(placement: .primaryAction) { exportButton }
-                .sharedBackgroundVisibility(.hidden)
-        } else {
-            ToolbarItem(placement: .primaryAction) { exportButton }
-        }
-    }
-
-    private var exportButton: some View {
-        ExportButton(model: model) { isShowingProgress = true }
     }
 
     private func perform(_ action: BookAction, on book: Audiobook) {
@@ -128,10 +109,10 @@ struct ContentView: View {
 
 private extension View {
     /// Presents the sign-in sheet while a login is pending; closing it cancels the login.
-    func loginSheet(for session: SessionViewModel, isEnabled: Bool) -> some View {
+    func loginSheet(for session: SessionViewModel) -> some View {
         sheet(
             isPresented: Binding(
-                get: { isEnabled && session.pendingLogin != nil },
+                get: { session.pendingLogin != nil },
                 set: { if !$0 { Task { await session.cancelSignIn() } } }
             )
         ) {

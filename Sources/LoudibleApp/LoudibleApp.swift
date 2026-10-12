@@ -78,14 +78,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// Builds the production object graph.
 @MainActor
 enum CompositionRoot {
-    static let destinationDefaultsKey = "ExportDestinationPath"
-
     static func makeAppViewModel() -> AppViewModel {
         let clock = SystemClock()
         let api = AudibleHTTPAPI(transport: URLSessionTransport(), random: SystemRandom(), clock: clock)
         let auth = AuthenticationCoordinator(api: api, store: KeychainCredentialStore(), clock: clock)
         // Earlier versions downloaded into Caches and deleted the file after exporting.
         try? FileManager.default.removeItem(at: legacyCachesDirectory())
+        // Earlier versions let the user choose an export folder; exports now go to the downloads folder.
+        UserDefaults.standard.removeObject(forKey: "ExportDestinationPath")
         let downloads = LocalDownloads(folder: downloadsFolder, manifestFolder: manifestsFolder())
         let queue = ExportQueue(
             auth: auth,
@@ -94,16 +94,15 @@ enum CompositionRoot {
             converter: FFmpegConverter(),
             downloads: downloads
         )
-        let savedDestination = UserDefaults.standard.string(forKey: destinationDefaultsKey).map { URL(fileURLWithPath: $0, isDirectory: true) }
         return AppViewModel(
             session: SessionViewModel(auth: auth),
             library: LibraryViewModel(service: LibraryService(api: api, auth: auth)),
-            export: ExportViewModel(queue: queue, destinationFolder: savedDestination),
+            export: ExportViewModel(queue: queue, exportFolder: downloadsFolder),
             downloads: downloads
         )
     }
 
-    /// Where downloaded `.aaxc`/`.aax` files are kept. Hard-coded for now; this is the one place
+    /// Where downloaded `.aaxc`/`.aax` files are kept, and the exported `.m4b` next to them. Hard-coded for now; this is the one place
     /// to change when it becomes a setting.
     static let downloadsFolder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Loudible", isDirectory: true)

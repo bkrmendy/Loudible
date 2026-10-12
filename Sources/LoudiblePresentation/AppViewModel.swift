@@ -90,13 +90,13 @@ public final class AppViewModel {
     /// gets its final name).
     public func rescan() async {
         let downloads = self.downloads
-        let exportFolder = export.destinationFolder
+        let exportFolder = export.exportFolder
         let busy = Set(export.jobs.filter { !$0.state.isFinished }.map(\.book.asin))
         let result = await Task.detached {
             let downloaded = downloads.scanDownloads()
             downloads.removeOrphanedManifests(keeping: Set(downloaded.keys).union(busy))
             let manifests = downloads.manifests()
-            let exported = exportFolder.map { downloads.scanExports(in: $0) } ?? [:]
+            let exported = downloads.scanExports(in: exportFolder)
             let localBooks = manifests.filter { downloaded[$0.book.asin] != nil }.map { manifest in
                 var book = manifest.book
                 // The stored cover still shows once Audible's image URL is gone.
@@ -130,7 +130,6 @@ public final class AppViewModel {
                 isExported: exportedFiles[book.asin] != nil,
                 isInLibrary: library.isInLibrary(book.asin),
                 hasManifest: manifestASINs.contains(book.asin),
-                hasExportFolder: export.destinationFolder != nil,
                 isSignedIn: session.isSignedIn
             )
         )
@@ -170,21 +169,6 @@ public final class AppViewModel {
     }
 
     public var hasActiveJobs: Bool { export.activeJobCount > 0 }
-
-    // MARK: Toolbar
-
-    /// Books in the selection that can be exported; books no longer in the library cannot.
-    private var exportableSelection: [Audiobook] {
-        library.selectedBooks.filter { library.isInLibrary($0.asin) }
-    }
-
-    public var canExport: Bool {
-        export.canExport(exportableSelection, isSignedIn: session.isSignedIn)
-    }
-
-    public func exportSelection() async {
-        await export.export(exportableSelection, isSignedIn: session.isSignedIn)
-    }
 
     /// Cancels every job, waits for the partial files to be removed, then signs out.
     /// Finished downloads and exports are kept.

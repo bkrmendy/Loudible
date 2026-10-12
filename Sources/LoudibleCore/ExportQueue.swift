@@ -113,17 +113,18 @@ public actor ExportQueue {
         let unique = books.filter { seen.insert($0.asin).inserted }
         guard !unique.isEmpty else { throw .nothingToExport }
 
+        // First, so an export destination that is the downloads folder exists before it is checked.
+        do {
+            try downloads.ensureFolder()
+        } catch {
+            throw .destinationUnavailable(downloads.folder.path)
+        }
         if kind == .export {
             guard let exportDestination else { throw .destinationUnavailable("") }
             var isDirectory: ObjCBool = false
             guard fileManager.fileExists(atPath: exportDestination.path, isDirectory: &isDirectory), isDirectory.boolValue,
                   fileManager.isWritableFile(atPath: exportDestination.path)
             else { throw .destinationUnavailable(exportDestination.path) }
-        }
-        do {
-            try downloads.ensureFolder()
-        } catch {
-            throw .destinationUnavailable(downloads.folder.path)
         }
 
         // A new run starts with a clean list; finished jobs of the last run are dropped.

@@ -20,12 +20,6 @@ enum PreviewState: String, CaseIterable, Sendable {
     case tileQueued, tileDownloading, tileExporting, tileFailed, tileDownloaded, tileExported
     case gridSignedOut, gridLoading, gridCheckingMarketplaces, gridEmpty, gridBooks, gridSelection, gridNoSearchResults
     case messagesNone, messagesOne, messagesSeveral, messagesNotice
-    // ExportViews.swift
-    case exportButtonNoSelection, exportButtonReady, exportButtonRunning
-    case exportFolderNone, exportFolderSet, exportFolderRunning
-    case jobRowQueued, jobRowLicensing, jobRowDownloading, jobRowConverting, jobRowFinalizing, jobRowNotCancellable
-    case jobRowWaitingForSignIn, jobRowCompleted, jobRowFailed, jobRowCancelled
-    case progressRunning, progressPaused, progressFinished, progressError
     // LoginSheet.swift
     case loginIdle, loginRegistering, loginError, loginPastedURL
     // ContentView.swift
@@ -52,12 +46,6 @@ enum PreviewCatalog {
         case .gridSignedOut, .gridLoading, .gridCheckingMarketplaces, .gridEmpty, .gridBooks, .gridSelection, .gridNoSearchResults:
             CGSize(width: 900, height: 560)
         case .messagesNone, .messagesOne, .messagesSeveral, .messagesNotice: CGSize(width: 700, height: 110)
-        case .exportButtonNoSelection, .exportButtonReady, .exportButtonRunning: CGSize(width: 220, height: 60)
-        case .exportFolderNone, .exportFolderSet, .exportFolderRunning: CGSize(width: 300, height: 160)
-        case .jobRowQueued, .jobRowLicensing, .jobRowDownloading, .jobRowConverting, .jobRowFinalizing, .jobRowNotCancellable,
-             .jobRowWaitingForSignIn, .jobRowCompleted, .jobRowFailed, .jobRowCancelled:
-            CGSize(width: 480, height: 70)
-        case .progressRunning, .progressPaused, .progressFinished, .progressError: CGSize(width: 520, height: 460)
         case .loginIdle, .loginRegistering, .loginError, .loginPastedURL: CGSize(width: 520, height: 760)
         case .windowSignedOut, .windowLibrary, .windowLoading, .windowLoadFailed: windowSize
         }
@@ -125,34 +113,10 @@ enum PreviewCatalog {
             return AnyView(MessagesBar(messages: [
                 "Your session expired. Sign in again to continue.",
                 "Audible returned HTTP 503 (Service Unavailable) while loading page 3 of your library. Try refreshing in a few minutes.",
-                "The export folder is not available or not writable: /Volumes/Archive/Audiobooks/Exports",
+                "The download folder could not be created or is not writable: /Users/jane/Documents/Loudible",
             ]))
         case .messagesNotice:
             return AnyView(MessagesBar(messages: [], notices: ["Couldn’t check the Audible Japan, India marketplaces for more titles."]))
-
-        case .exportButtonNoSelection: return exportButton(canExport: false)
-        case .exportButtonReady: return exportButton(canExport: true)
-        case .exportButtonRunning: return exportButton(canExport: false, isRunning: true)
-
-        case .exportFolderNone: return AnyView(ExportFolderPopover(folder: nil, canChooseFolder: true) {})
-        case .exportFolderSet: return AnyView(ExportFolderPopover(folder: PreviewData.exportFolder, canChooseFolder: true) {})
-        case .exportFolderRunning: return AnyView(ExportFolderPopover(folder: PreviewData.exportFolder, canChooseFolder: false) {})
-
-        case .jobRowQueued: return jobRow(PreviewData.job(books[0]))
-        case .jobRowLicensing: return jobRow(PreviewData.job(books[1], .running(.licensing, progress: 0.5)))
-        case .jobRowDownloading: return jobRow(PreviewData.job(books[2], .running(.downloading, progress: 0.4)))
-        case .jobRowConverting: return jobRow(PreviewData.job(books[3], .running(.downloading, progress: 1), .running(.converting, progress: 0.6)))
-        case .jobRowFinalizing: return jobRow(PreviewData.job(books[4], .running(.converting, progress: 1), .running(.finalizing, progress: 0.5)))
-        case .jobRowNotCancellable: return jobRow(PreviewData.job(books[2], .running(.downloading, progress: 0.4)), canCancel: false)
-        case .jobRowWaitingForSignIn: return jobRow(PreviewData.job(books[5], .waitingForAuthentication))
-        case .jobRowCompleted: return jobRow(PreviewData.completedJob(books[6]), canCancel: false)
-        case .jobRowFailed: return jobRow(PreviewData.failedJob(books[4]), canCancel: false)
-        case .jobRowCancelled: return jobRow(PreviewData.job(books[7], .cancelled), canCancel: false)
-
-        case .progressRunning: return progressSheet(PreviewData.runningProgress)
-        case .progressPaused: return progressSheet(PreviewData.pausedProgress)
-        case .progressFinished: return progressSheet(PreviewData.finishedProgress)
-        case .progressError: return progressSheet(PreviewData.startErrorProgress)
 
         case .loginIdle: return loginSheet()
         case .loginRegistering: return loginSheet(isRegistering: true)
@@ -226,27 +190,6 @@ enum PreviewCatalog {
         ))
     }
 
-    private static func exportButton(canExport: Bool, isRunning: Bool = false) -> AnyView {
-        AnyView(ExportButtonContent(
-            canExport: canExport,
-            isRunning: isRunning,
-            fractionCompleted: isRunning ? 0.4 : 0,
-            activityTitle: "Exporting",
-            canShowFolder: true,
-            isFolderPopoverPresented: .constant(false),
-            export: {},
-            folderPopover: { EmptyView() }
-        ))
-    }
-
-    private static func jobRow(_ job: ExportJob, canCancel: Bool = true) -> AnyView {
-        AnyView(ExportJobRow(job: job, canCancel: canCancel) {}.padding(.horizontal))
-    }
-
-    private static func progressSheet(_ progress: ExportProgress) -> AnyView {
-        AnyView(ExportProgressSheetContent(progress: progress, signIn: {}, cancel: { _ in }, cancelAll: {}, close: {}))
-    }
-
     private static func loginSheet(
         isRegistering: Bool = false, errorMessage: String? = nil, pastedURL: String = "", showsBrowserFallback: Bool = false
     ) -> AnyView {
@@ -274,7 +217,7 @@ enum PreviewCatalog {
     }
 }
 
-/// Sample books, jobs, sessions, and logins. All synthetic.
+/// Sample books, sessions, and logins. All synthetic.
 @MainActor
 enum PreviewData {
     /// Ten books: varied titles, authors, and runtimes. Books 2 and 8 have no cover, book 7 no runtime.
@@ -304,8 +247,6 @@ enum PreviewData {
             Audiobook(asin: "PREVIEW010", marketplace: .us, title: "Paper Rivers", authors: ["Ines Varga"], runtimeMinutes: 288, coverImageURL: cover(1)),
         ]
     }()
-
-    static let exportFolder = URL(fileURLWithPath: "/Users/jane/Music/Audiobooks", isDirectory: true)
 
     static let session = AudibleSession(
         marketplace: .us,
@@ -342,69 +283,6 @@ enum PreviewData {
         case .none, .failed: [BookMenuItem(.download)]
         }
         return BookTileState(isInLibrary: isInLibrary, status: status, menuItems: items)
-    }
-
-    // MARK: Jobs
-
-    /// An export job moved through `states` with `ExportJob.transition(to:)`.
-    static func job(_ book: Audiobook, kind: ExportJob.Kind = .export, _ states: ExportJob.State...) -> ExportJob {
-        var job = ExportJob(book: book, kind: kind)
-        for state in states { try! job.transition(to: state) }
-        return job
-    }
-
-    static func completedJob(_ book: Audiobook) -> ExportJob {
-        job(book, .running(.converting, progress: 1), .completed(exportFolder.appendingPathComponent("\(book.title) [\(book.asin)].m4b")))
-    }
-
-    static func failedJob(_ book: Audiobook) -> ExportJob {
-        job(book, .running(.licensing, progress: 0), .failed(
-            "Audible denied the license for this title: the book is not in your library, or it was returned. Refresh the library and try again."
-        ))
-    }
-
-    static var runningProgress: ExportProgress {
-        let jobs = [
-            completedJob(books[0]),
-            job(books[1], .running(.downloading, progress: 1), .running(.converting, progress: 0.35)),
-            job(books[3], kind: .download, .running(.downloading, progress: 0.6)),
-            job(books[5]),
-        ]
-        return ExportProgress(
-            jobs: jobs, cancellableJobs: Set(jobs.dropFirst().map(\.id)), canCancelAll: true, isRunning: true,
-            activityTitle: "Working", statusText: "Working on 2 of 4…", isWaitingForAuthentication: false, canSignIn: false
-        )
-    }
-
-    static var pausedProgress: ExportProgress {
-        let jobs = [completedJob(books[0]), job(books[1], .waitingForAuthentication), job(books[3])]
-        return ExportProgress(
-            jobs: jobs, cancellableJobs: Set(jobs.dropFirst().map(\.id)), canCancelAll: true, isRunning: true,
-            activityTitle: "Exporting", statusText: "Paused: sign in to Audible to continue.",
-            isWaitingForAuthentication: true, canSignIn: true
-        )
-    }
-
-    static var finishedProgress: ExportProgress {
-        let jobs = [
-            completedJob(books[0]),
-            failedJob(books[4]),
-            job(books[1], .running(.downloading, progress: 0.2), .cancelled),
-            completedJob(books[6]),
-            job(books[8], .cancelled),
-        ]
-        return ExportProgress(
-            jobs: jobs, cancellableJobs: [], canCancelAll: false, isRunning: false,
-            activityTitle: "Exporting", statusText: "2 exported, 1 failed, 2 cancelled", isWaitingForAuthentication: false, canSignIn: false
-        )
-    }
-
-    static var startErrorProgress: ExportProgress {
-        ExportProgress(
-            jobs: [], cancellableJobs: [], canCancelAll: false, isRunning: false, activityTitle: "Exporting", statusText: nil,
-            errorMessage: "The export folder is not available or not writable: /Volumes/Archive/Audiobooks",
-            isWaitingForAuthentication: false, canSignIn: false
-        )
     }
 
     // MARK: Covers
@@ -452,8 +330,7 @@ extension AppViewModel {
     @MainActor
     static func preview(
         signedIn: Bool = true,
-        library: PreviewLibrary = .books(PreviewData.books),
-        exportFolder: URL? = PreviewData.exportFolder
+        library: PreviewLibrary = .books(PreviewData.books)
     ) -> AppViewModel {
         let api = PreviewAPI(library: library)
         let auth = AuthenticationCoordinator(api: api, store: PreviewCredentialStore(session: signedIn ? PreviewData.session : nil), clock: SystemClock())
@@ -468,7 +345,7 @@ extension AppViewModel {
         return AppViewModel(
             session: SessionViewModel(auth: auth),
             library: LibraryViewModel(service: LibraryService(api: api, auth: auth)),
-            export: ExportViewModel(queue: queue, destinationFolder: exportFolder),
+            export: ExportViewModel(queue: queue, exportFolder: downloads.folder),
             downloads: downloads
         )
     }

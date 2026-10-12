@@ -88,19 +88,17 @@ To upgrade FFmpeg, follow the steps at the top of `Scripts/ffmpeg-version.sh`.
    instead. After signing in, paste the address of the page you land on
    (`…/ap/maplanding?…`) into the sheet.
 2. Your purchased library loads. Audible Plus catalog titles, podcasts, and series or podcast
-   containers are hidden. Search and select one or more books.
+   containers are hidden. Search for books.
 3. **Download** keeps a book's encrypted Audible file (`Title [ASIN].aaxc`, or `.aax` for
    legacy titles) in `~/Documents/Loudible/`. **Export** turns it into
-   `Title [ASIN].m4b` in the export folder: the audio is not re-encoded; chapters, metadata,
+   `Title [ASIN].m4b` in the same folder: the audio is not re-encoded; chapters, metadata,
    and cover art are kept. Exporting a book that is not downloaded yet downloads it first and
    keeps the file. If a file with that name already exists, the new one gets a numbered
    suffix: `Title [ASIN] (2).m4b`.
 4. Each book has a menu (the dots next to its title, or right-click) with Download, Cancel,
-   Export to M4B, Show in Finder, Show Exported File in Finder, and Delete Download. Select
-   books and click **Export** in the toolbar to export several at once; choose the export
-   folder with the chevron next to it.
+   Export to M4B, Show in Finder, Show Exported File in Finder, and Delete Download.
 5. A badge on the cover shows the book's state: queued, downloading or exporting (a progress
-   ring), failed, downloaded, or exported.
+   ring), or downloaded.
 
 Jobs for one book run in order (download, then export); up to three different books are worked
 on at once. A downloaded book is exported with the keys saved at download time, so it needs no

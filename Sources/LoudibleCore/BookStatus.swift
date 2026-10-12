@@ -69,18 +69,16 @@ public enum BookMenu {
         public var isExported: Bool
         public var isInLibrary: Bool
         public var hasManifest: Bool
-        public var hasExportFolder: Bool
         public var isSignedIn: Bool
 
         public init(
             isDownloaded: Bool, isExported: Bool, isInLibrary: Bool,
-            hasManifest: Bool, hasExportFolder: Bool, isSignedIn: Bool
+            hasManifest: Bool, isSignedIn: Bool
         ) {
             self.isDownloaded = isDownloaded
             self.isExported = isExported
             self.isInLibrary = isInLibrary
             self.hasManifest = hasManifest
-            self.hasExportFolder = hasExportFolder
             self.isSignedIn = isSignedIn
         }
     }
@@ -112,7 +110,6 @@ public enum BookMenu {
     private static func exportBlocker(hasActiveJob: Bool, context: Context) -> String? {
         // Exporting books that have left the library is out of scope.
         if !context.isInLibrary { return "This book is no longer in your library." }
-        if !context.hasExportFolder { return "Choose an export folder first." }
         if hasActiveJob { return "This book is already being downloaded or exported." }
         if !context.hasManifest && !context.isSignedIn {
             return "Sign in to Audible to get the keys for this download."

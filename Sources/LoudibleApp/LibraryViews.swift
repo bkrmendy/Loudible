@@ -263,18 +263,14 @@ private struct BookStatusBadge: View {
 
     private var content: AnyView? {
         switch status {
-        case .none:
+        case .none, .failed, .exported:
             nil
         case .queued:
             AnyView(icon("clock", .white))
         case .running(let kind, let progress):
             AnyView(ProgressRing(progress: progress, color: kind == .export ? .accentColor : .white))
-        case .failed:
-            AnyView(icon("exclamationmark.triangle.fill", .yellow))
         case .downloaded:
             AnyView(icon("arrow.down.circle.fill", .white))
-        case .exported:
-            AnyView(icon("checkmark.seal.fill", .green))
         }
     }
 

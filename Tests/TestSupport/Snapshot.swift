@@ -9,10 +9,6 @@ import SwiftUI
 /// a real window. The window is never shown: its captures match a visible window's byte for byte.
 /// It still needs a logged-in macOS session. `ImageRenderer` needs no window but draws pickers,
 /// text fields, lists, and progress bars as "unsupported" placeholders.
-///
-/// Known limitation: `cacheDisplay` captures nothing at all while the Export button has its
-/// accent-tinted Liquid Glass (`exportButtonReady`, `exportButtonRunning`, and any window with a
-/// selection or running jobs). Capturing the layer tree or showing the window does not help.
 @MainActor
 public enum Snapshot {
     /// Writes `<folder>/<state>.png` for each state, or only for those named in `states`.
