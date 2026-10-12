@@ -23,7 +23,9 @@ import TestSupport
             trash: { try FileManager.default.removeItem(at: $0) }
         )
         api.licenseHandler.withLock { $0 = { asin, _ in Fixtures.license(asin: asin) } }
-        api.libraryHandler.withLock { $0 = { _, _, _ in LibraryPage(entries: [Fixtures.entry("B1"), Fixtures.entry("B2")]) } }
+        api.libraryHandler.withLock {
+            $0 = { _, _, marketplace, _ in LibraryPage(entries: marketplace == .us ? [Fixtures.entry("B1"), Fixtures.entry("B2")] : []) }
+        }
     }
 
     func makeApp() async throws -> (AppViewModel, ExportQueue) {

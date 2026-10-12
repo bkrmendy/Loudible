@@ -46,8 +46,10 @@ public enum Fixtures {
         URL(string: "https://\(marketplace.amazonHost)/ap/maplanding?openid.assoc_handle=amzn_audible_ios_us&openid.oa2.authorization_code=\(code)")!
     }
 
-    public static func book(_ asin: String, title: String? = nil, authors: [String] = ["Author A"]) -> Audiobook {
-        Audiobook(asin: asin, title: title ?? "Book \(asin)", authors: authors, narrators: ["Narrator N"])
+    public static func book(
+        _ asin: String, title: String? = nil, authors: [String] = ["Author A"], marketplace: Marketplace = .us
+    ) -> Audiobook {
+        Audiobook(asin: asin, marketplace: marketplace, title: title ?? "Book \(asin)", authors: authors, narrators: ["Narrator N"])
     }
 
     public static func entry(
@@ -56,10 +58,11 @@ public enum Fixtures {
         deliveryType: String = "SinglePartBook",
         contentType: String = "Product",
         isAYCE: Bool = false,
-        relationships: [ProductRelationship] = []
+        relationships: [ProductRelationship] = [],
+        marketplace: Marketplace = .us
     ) -> LibraryEntry {
         LibraryEntry(
-            book: book(asin, title: title),
+            book: book(asin, title: title, marketplace: marketplace),
             contentDeliveryType: deliveryType,
             contentType: contentType,
             isAYCE: isAYCE,

@@ -45,6 +45,18 @@ import TestSupport
         #expect(session.needsRefresh(at: Fixtures.referenceDate.addingTimeInterval(601)))
     }
 
+    @Test func audiobookRoundTripsItsMarketplace() throws {
+        let book = Fixtures.book("B1", marketplace: .japan)
+        #expect(try JSONDecoder().decode(Audiobook.self, from: JSONEncoder().encode(book)) == book)
+    }
+
+    @Test func audiobookWithoutMarketplaceDecodesAsUS() throws {
+        // Manifests written before the store was recorded.
+        let json = #"{"asin": "B1", "title": "Old", "authors": [], "narrators": []}"#
+        let book = try JSONDecoder().decode(Audiobook.self, from: Data(json.utf8))
+        #expect(book == Audiobook(asin: "B1", marketplace: .us, title: "Old"))
+    }
+
     @Test func sessionRoundTripsThroughCodable() throws {
         let session = Fixtures.session(marketplace: .france)
         let decoded = try JSONDecoder().decode(AudibleSession.self, from: JSONEncoder().encode(session))

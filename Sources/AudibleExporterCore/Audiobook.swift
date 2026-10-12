@@ -5,6 +5,8 @@ public struct Audiobook: Sendable, Hashable, Identifiable, Codable {
     public var id: String { asin }
 
     public let asin: String
+    /// The store whose library holds the title; its licenses are requested there.
+    public let marketplace: Marketplace
     public var title: String
     public var subtitle: String?
     public var authors: [String]
@@ -19,6 +21,7 @@ public struct Audiobook: Sendable, Hashable, Identifiable, Codable {
 
     public init(
         asin: String,
+        marketplace: Marketplace,
         title: String,
         subtitle: String? = nil,
         authors: [String] = [],
@@ -31,6 +34,7 @@ public struct Audiobook: Sendable, Hashable, Identifiable, Codable {
         coverImageURL: URL? = nil
     ) {
         self.asin = asin
+        self.marketplace = marketplace
         self.title = title
         self.subtitle = subtitle
         self.authors = authors
@@ -41,6 +45,24 @@ public struct Audiobook: Sendable, Hashable, Identifiable, Codable {
         self.releaseDate = releaseDate
         self.purchaseDate = purchaseDate
         self.coverImageURL = coverImageURL
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        asin = try container.decode(String.self, forKey: .asin)
+        // Manifests written before the marketplace was recorded. While the book is in the
+        // library, the library's copy (with the right store) is used instead.
+        marketplace = try container.decodeIfPresent(Marketplace.self, forKey: .marketplace) ?? .us
+        title = try container.decode(String.self, forKey: .title)
+        subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
+        authors = try container.decode([String].self, forKey: .authors)
+        narrators = try container.decode([String].self, forKey: .narrators)
+        seriesTitle = try container.decodeIfPresent(String.self, forKey: .seriesTitle)
+        publisher = try container.decodeIfPresent(String.self, forKey: .publisher)
+        runtimeMinutes = try container.decodeIfPresent(Int.self, forKey: .runtimeMinutes)
+        releaseDate = try container.decodeIfPresent(String.self, forKey: .releaseDate)
+        purchaseDate = try container.decodeIfPresent(Date.self, forKey: .purchaseDate)
+        coverImageURL = try container.decodeIfPresent(URL.self, forKey: .coverImageURL)
     }
 }
 

@@ -30,6 +30,13 @@ public enum LibraryRules {
         return nil
     }
 
+    /// `existing` followed by the books of `new` whose ASIN it does not have yet, so the home
+    /// store's copy of a title wins over another store's.
+    public static func merge(_ existing: [Audiobook], _ new: [Audiobook]) -> [Audiobook] {
+        var seen = Set(existing.map(\.asin))
+        return existing + new.filter { seen.insert($0.asin).inserted }
+    }
+
     /// Owned audiobooks in library order, without duplicate ASINs (first occurrence wins).
     public static func purchasedBooks(from entries: [LibraryEntry]) -> [Audiobook] {
         var seen = Set<String>()
@@ -99,7 +106,27 @@ public struct LibrarySelection: Sendable, Equatable {
     }
 }
 
+/// The outcome of loading one marketplace other than the signed-in one.
+public enum MarketplaceScan: Sendable, Equatable {
+    /// The store holds purchased titles.
+    case titles(Marketplace, [Audiobook])
+    /// The store holds nothing that counts as purchased.
+    case empty(Marketplace)
+    /// The store could not be loaded. Affects that store only, never the session.
+    case failed(Marketplace, ExporterError)
+
+    public var marketplace: Marketplace {
+        switch self {
+        case .titles(let marketplace, _), .empty(let marketplace), .failed(let marketplace, _): marketplace
+        }
+    }
+}
+
 /// Fetches every library page and applies the ownership rules.
+///
+/// Audible keeps one library per marketplace: a title bought while the Amazon account was set to
+/// another country lives only in that country's library. The signed-in (home) store is loaded
+/// first; the others can then be checked one by one with the same device registration.
 public struct LibraryService: Sendable {
     public static let defaultPageSize = 1000
     /// Hard stop in case a server keeps returning full pages.
@@ -115,15 +142,68 @@ public struct LibraryService: Sendable {
         self.pageSize = pageSize
     }
 
-    public func fetchPurchasedBooks() async throws(ExporterError) -> [Audiobook] {
+    /// The signed-in marketplace and its purchased books.
+    public func fetchHomeLibrary() async throws(ExporterError) -> (marketplace: Marketplace, books: [Audiobook]) {
+        let home = try await auth.validSession().marketplace
+        return (home, try await fetchPurchasedBooks(in: home))
+    }
+
+    /// The purchased books in `marketplace`. A rejected token is refreshed and retried, and a
+    /// second rejection requires signing in again, so use this for the home store only.
+    public func fetchPurchasedBooks(in marketplace: Marketplace) async throws(ExporterError) -> [Audiobook] {
+        let api = self.api, auth = self.auth, pageSize = self.pageSize
+        return try await fetchPages { number throws(ExporterError) in
+            try await auth.withValidSession { session in
+                try await api.libraryPage(number, pageSize: pageSize, marketplace: marketplace, session: session)
+            }
+        }
+    }
+
+    /// Loads every marketplace except `home`, one after another in `Marketplace.all` order.
+    ///
+    /// A store that rejects the request yields `.failed` for that store only: unlike the home
+    /// store, a rejection here must never end the session or delete the stored credentials.
+    /// Ends early when the consuming task is cancelled.
+    public func fetchOtherMarketplaces(excluding home: Marketplace) -> AsyncStream<MarketplaceScan> {
+        let (stream, continuation) = AsyncStream<MarketplaceScan>.makeStream()
+        let task = Task {
+            for marketplace in Marketplace.all where marketplace != home {
+                let scan = await scan(marketplace)
+                if Task.isCancelled { break }
+                continuation.yield(scan)
+            }
+            continuation.finish()
+        }
+        continuation.onTermination = { _ in task.cancel() }
+        return stream
+    }
+
+    private func scan(_ marketplace: Marketplace) async -> MarketplaceScan {
+        let api = self.api, auth = self.auth, pageSize = self.pageSize
+        do {
+            let books = try await fetchPages { number throws(ExporterError) in
+                // Refreshes (shared with any other caller) when the token is about to expire.
+                let session = try await auth.validSession()
+                do {
+                    return try await api.libraryPage(number, pageSize: pageSize, marketplace: marketplace, session: session)
+                } catch {
+                    throw ExporterError.from(error)
+                }
+            }
+            return books.isEmpty ? .empty(marketplace) : .titles(marketplace, books)
+        } catch {
+            return .failed(marketplace, error)
+        }
+    }
+
+    private func fetchPages(
+        _ page: (Int) async throws(ExporterError) -> LibraryPage
+    ) async throws(ExporterError) -> [Audiobook] {
         var entries: [LibraryEntry] = []
         var seen = Set<String>()
         var received = 0
         for number in 1...Self.maximumPages {
-            let api = self.api, pageSize = self.pageSize
-            let page = try await auth.withValidSession { session in
-                try await api.libraryPage(number, pageSize: pageSize, session: session)
-            }
+            let page = try await page(number)
             received += page.entries.count
             let new = page.entries.filter { seen.insert($0.book.asin).inserted }
             entries += new

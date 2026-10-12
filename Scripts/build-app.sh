@@ -4,6 +4,7 @@
 #
 #   Scripts/build-app.sh            # release build
 #   CONFIGURATION=debug Scripts/build-app.sh
+#   APP_VERSION=1.2.0 Scripts/build-app.sh   # override the project's version (used by releases)
 #
 # The minimal LGPL FFmpeg from Scripts/build-ffmpeg.sh is copied into Contents/Frameworks
 # with @rpath install names; notices, licenses, and About-panel credits go to
@@ -24,10 +25,19 @@ APP="build/$APP_NAME.app"
 DERIVED_DATA=".build/xcode"
 
 # Bundle id, version, Info.plist, and deployment target are set in the Xcode project.
+VERSION_SETTINGS=()
+if [ -n "${APP_VERSION:-}" ]; then
+    # Bundle versions must be plain numbers: 1.2.0-beta.1 becomes 1.2.0.
+    case "${APP_VERSION%%-*}" in
+        *[!0-9.]*|.*|*.|*..*|"")
+            echo "error: APP_VERSION '$APP_VERSION' does not start with a version like 1.2.0" >&2; exit 1 ;;
+    esac
+    VERSION_SETTINGS=(MARKETING_VERSION="${APP_VERSION%%-*}" CURRENT_PROJECT_VERSION="${APP_VERSION%%-*}")
+fi
 xcodebuild -quiet \
     -project App/AudibleExporter.xcodeproj -scheme "$APP_NAME" \
     -configuration "$XCODE_CONFIGURATION" -destination 'platform=macOS,arch=arm64' \
-    -derivedDataPath "$DERIVED_DATA" build
+    -derivedDataPath "$DERIVED_DATA" build ${VERSION_SETTINGS[@]+"${VERSION_SETTINGS[@]}"}
 
 rm -rf "$APP"
 mkdir -p build

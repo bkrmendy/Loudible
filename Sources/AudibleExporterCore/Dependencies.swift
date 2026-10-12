@@ -9,10 +9,11 @@ public protocol AudibleAPI: Sendable {
     func register(_ login: PendingLogin, authorizationCode: String) async throws -> AudibleSession
     /// Returns the session with a fresh access token.
     func refresh(_ session: AudibleSession) async throws -> AudibleSession
-    /// Fetches one 1-based page of the library.
-    func libraryPage(_ number: Int, pageSize: Int, session: AudibleSession) async throws -> LibraryPage
-    /// Requests and decrypts a download license.
-    func license(for asin: String, session: AudibleSession) async throws -> ContentLicense
+    /// Fetches one 1-based page of the library held in `marketplace`. The same device
+    /// registration is accepted by every store, so it need not be the session's own.
+    func libraryPage(_ number: Int, pageSize: Int, marketplace: Marketplace, session: AudibleSession) async throws -> LibraryPage
+    /// Requests and decrypts a download license from the store that holds the title.
+    func license(for asin: String, marketplace: Marketplace, session: AudibleSession) async throws -> ContentLicense
 }
 
 /// Persists the signed-in session.

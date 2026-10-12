@@ -58,7 +58,7 @@ import TestSupport
         let api = AudibleHTTPAPI(transport: transport, random: SequentialRandom(), clock: TestClock())
         var session = try Fixture.signingSession(marketplace: .us)
         session.devicePrivateKey = try Fixture.string("synthetic-device-key.pem")
-        _ = try? await api.license(for: "B000000001", session: session)
+        _ = try? await api.license(for: "B000000001", marketplace: .us, session: session)
 
         let request = try #require(transport.lastRequest)
         #expect(request.httpMethod == "POST")
@@ -71,6 +71,18 @@ import TestSupport
         #expect(features["drm_types"] as? [String] == ["Adrm"])
         #expect(features["chapter_titles_type"] as? String == "Tree")
         #expect((body["response_groups"] as? String)?.contains("chapter_info") == true)
+    }
+
+    @Test func requestsLicenseFromTheBooksStore() async throws {
+        let transport = MockTransport(status: 200, body: try Fixture.data("license-aaxc.json"))
+        let api = AudibleHTTPAPI(transport: transport, random: SequentialRandom(), clock: TestClock())
+        var session = try Fixture.signingSession(marketplace: .us)
+        session.devicePrivateKey = try Fixture.string("synthetic-device-key.pem")
+        _ = try? await api.license(for: "B000000001", marketplace: .uk, session: session)
+
+        let request = try #require(transport.lastRequest)
+        #expect(request.url?.absoluteString == "https://api.audible.co.uk/1.0/content/B000000001/licenserequest")
+        #expect(request.value(forHTTPHeaderField: "x-adp-signature") != nil)
     }
 
     @Test func parsesAAXCLicense() throws {

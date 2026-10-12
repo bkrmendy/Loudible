@@ -85,19 +85,23 @@ public final class MockAudibleAPI: AudibleAPI, @unchecked Sendable {
     public let makeLoginHandler: Locked<@Sendable (Marketplace) throws -> PendingLogin>
     public let registerHandler: Locked<@Sendable (PendingLogin, String) async throws -> AudibleSession>
     public let refreshHandler: Locked<@Sendable (AudibleSession) async throws -> AudibleSession>
-    public let libraryHandler: Locked<@Sendable (Int, Int, AudibleSession) async throws -> LibraryPage>
+    /// Page number, page size, the store asked, and the session.
+    public let libraryHandler: Locked<@Sendable (Int, Int, Marketplace, AudibleSession) async throws -> LibraryPage>
     public let licenseHandler: Locked<@Sendable (String, AudibleSession) async throws -> ContentLicense>
 
     public let refreshCount = Locked(0)
     public let registerCount = Locked(0)
+    /// Pages requested from any store; `requestedMarketplaces` has the store of each.
     public let requestedPages = Locked<[Int]>([])
+    public let requestedMarketplaces = Locked<[Marketplace]>([])
     public let requestedLicenses = Locked<[String]>([])
+    public let requestedLicenseMarketplaces = Locked<[Marketplace]>([])
 
     public init() {
         makeLoginHandler = Locked { marketplace in Fixtures.pendingLogin(marketplace: marketplace) }
         registerHandler = Locked { _, _ in throw Unscripted() }
         refreshHandler = Locked { _ in throw Unscripted() }
-        libraryHandler = Locked { _, _, _ in throw Unscripted() }
+        libraryHandler = Locked { _, _, _, _ in throw Unscripted() }
         licenseHandler = Locked { _, _ in throw Unscripted() }
     }
 
@@ -115,13 +119,15 @@ public final class MockAudibleAPI: AudibleAPI, @unchecked Sendable {
         return try await refreshHandler.current(session)
     }
 
-    public func libraryPage(_ number: Int, pageSize: Int, session: AudibleSession) async throws -> LibraryPage {
+    public func libraryPage(_ number: Int, pageSize: Int, marketplace: Marketplace, session: AudibleSession) async throws -> LibraryPage {
         requestedPages.withLock { $0.append(number) }
-        return try await libraryHandler.current(number, pageSize, session)
+        requestedMarketplaces.withLock { $0.append(marketplace) }
+        return try await libraryHandler.current(number, pageSize, marketplace, session)
     }
 
-    public func license(for asin: String, session: AudibleSession) async throws -> ContentLicense {
+    public func license(for asin: String, marketplace: Marketplace, session: AudibleSession) async throws -> ContentLicense {
         requestedLicenses.withLock { $0.append(asin) }
+        requestedLicenseMarketplaces.withLock { $0.append(marketplace) }
         return try await licenseHandler.current(asin, session)
     }
 }

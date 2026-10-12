@@ -6,6 +6,8 @@ import SwiftUI
 struct BookTileState: Equatable {
     var isSelected = false
     var isInLibrary = true
+    /// Short code of the store holding the book, when it is not the signed-in one.
+    var marketplaceBadge: String?
     var status: BookStatus = .none
     var menuItems: [BookMenuItem] = []
 }
@@ -19,6 +21,7 @@ struct LibraryGridContent: View {
     let isLibraryEmpty: Bool
     let isSignedIn: Bool
     let isLoading: Bool
+    var isCheckingMarketplaces = false
     let canSelect: Bool
     let tile: (Audiobook) -> BookTileState
     let toggle: (Audiobook) -> Void
@@ -45,34 +48,42 @@ struct LibraryGridContent: View {
         }
         .overlay {
             if isLibraryEmpty {
-                Text(
-                    isSignedIn
-                        ? (isLoading ? "Loading library…" : "No purchased audiobooks")
-                        : "Sign in to see your library"
-                )
-                .foregroundStyle(.secondary)
+                Text(placeholder).foregroundStyle(.secondary)
             }
         }
     }
+
+    private var placeholder: String {
+        guard isSignedIn else { return "Sign in to see your library" }
+        if isLoading { return "Loading library…" }
+        return isCheckingMarketplaces ? "Checking other marketplaces…" : "No purchased audiobooks"
+    }
 }
 
-/// Error messages above the grid; nothing when there are none.
+/// Error messages above the grid, then notices (informational, not failures); nothing when
+/// there are neither.
 struct MessagesBar: View {
     let messages: [String]
+    var notices: [String] = []
 
     var body: some View {
-        if !messages.isEmpty {
+        if !messages.isEmpty || !notices.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(messages, id: \.self) { message in
                     Label(message, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 }
+                ForEach(notices, id: \.self) { notice in
+                    Label(notice, systemImage: "info.circle")
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(.red.opacity(0.08))
+            .background(messages.isEmpty ? Color.secondary.opacity(0.08) : Color.red.opacity(0.08))
         }
     }
 }
@@ -110,6 +121,11 @@ struct BookTile: View {
                     .overlay(alignment: .bottomTrailing) {
                         BookStatusBadge(status: state.status).padding(6)
                     }
+                    .overlay(alignment: .topLeading) {
+                        if let badge = state.marketplaceBadge {
+                            MarketplaceBadge(code: badge).padding(6)
+                        }
+                    }
                     .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
                     .contentShape(Rectangle())
             }
@@ -117,7 +133,9 @@ struct BookTile: View {
             .disabled(!canSelect)
             .help(tooltip)
             .accessibilityLabel(book.title)
-            .accessibilityValue(state.status.accessibilityText ?? "")
+            .accessibilityValue(
+                [state.marketplaceBadge.map { "Audible \($0)" }, state.status.accessibilityText].compactMap { $0 }.joined(separator: ", ")
+            )
             .accessibilityAddTraits(state.isSelected ? .isSelected : [])
             .accessibilityActions {
                 ForEach(state.menuItems.filter(\.isEnabled)) { item in
@@ -211,6 +229,22 @@ private struct BookMenuContent: View {
     }
 }
 
+/// The store code in the cover's corner, e.g. "UK", for titles from another marketplace.
+private struct MarketplaceBadge: View {
+    let code: String
+
+    var body: some View {
+        Text(code)
+            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(.black.opacity(0.6)))
+            .help("From the Audible \(code) marketplace")
+            .accessibilityHidden(true)
+    }
+}
+
 /// The status icon in the cover's corner, on a dark disc so it reads on any artwork.
 private struct BookStatusBadge: View {
     let status: BookStatus
@@ -288,6 +322,7 @@ extension BookAction {
 #Preview("Tile – no runtime") { PreviewCatalog.view(.tileNoRuntime) }
 #Preview("Tile – disabled") { PreviewCatalog.view(.tileDisabled) }
 #Preview("Tile – not in library") { PreviewCatalog.view(.tileNotInLibrary) }
+#Preview("Tile – other marketplace") { PreviewCatalog.view(.tileOtherMarketplace) }
 #Preview("Tile – queued") { PreviewCatalog.view(.tileQueued) }
 #Preview("Tile – downloading") { PreviewCatalog.view(.tileDownloading) }
 #Preview("Tile – exporting") { PreviewCatalog.view(.tileExporting) }
@@ -296,6 +331,7 @@ extension BookAction {
 #Preview("Tile – exported") { PreviewCatalog.view(.tileExported) }
 #Preview("Grid – signed out") { PreviewCatalog.view(.gridSignedOut) }
 #Preview("Grid – loading") { PreviewCatalog.view(.gridLoading) }
+#Preview("Grid – checking marketplaces") { PreviewCatalog.view(.gridCheckingMarketplaces) }
 #Preview("Grid – empty library") { PreviewCatalog.view(.gridEmpty) }
 #Preview("Grid – books") { PreviewCatalog.view(.gridBooks) }
 #Preview("Grid – books with selection") { PreviewCatalog.view(.gridSelection) }
@@ -303,4 +339,5 @@ extension BookAction {
 #Preview("Messages – none") { PreviewCatalog.view(.messagesNone) }
 #Preview("Messages – one") { PreviewCatalog.view(.messagesOne) }
 #Preview("Messages – several long") { PreviewCatalog.view(.messagesSeveral) }
+#Preview("Messages – notice") { PreviewCatalog.view(.messagesNotice) }
 #endif

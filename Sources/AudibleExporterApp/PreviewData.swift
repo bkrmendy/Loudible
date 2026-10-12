@@ -13,12 +13,12 @@ enum PreviewState: String, CaseIterable, Sendable {
     // AccountViews.swift
     case avatarInitial, avatarNoName, avatarLarge
     case accountButtonSignedOut, accountButtonSignedIn, accountButtonLongName, accountButtonNeedsReauthentication
-    case accountPopoverSignedOut, accountPopoverWorking, accountPopoverExpired, accountPopoverSignedIn
+    case accountPopoverSignedOut, accountPopoverWorking, accountPopoverExpired, accountPopoverSignedIn, accountPopoverOtherMarketplaces
     // LibraryViews.swift
-    case tileUnselected, tileSelected, tileNoCover, tileLongTitle, tileNoRuntime, tileDisabled, tileNotInLibrary
+    case tileUnselected, tileSelected, tileNoCover, tileLongTitle, tileNoRuntime, tileDisabled, tileNotInLibrary, tileOtherMarketplace
     case tileQueued, tileDownloading, tileExporting, tileFailed, tileDownloaded, tileExported
-    case gridSignedOut, gridLoading, gridEmpty, gridBooks, gridSelection, gridNoSearchResults
-    case messagesNone, messagesOne, messagesSeveral
+    case gridSignedOut, gridLoading, gridCheckingMarketplaces, gridEmpty, gridBooks, gridSelection, gridNoSearchResults
+    case messagesNone, messagesOne, messagesSeveral, messagesNotice
     // ExportViews.swift
     case exportButtonNoSelection, exportButtonReady, exportButtonRunning
     case exportFolderNone, exportFolderSet, exportFolderRunning
@@ -42,14 +42,14 @@ enum PreviewCatalog {
         case .avatarInitial, .avatarNoName, .avatarLarge: CGSize(width: 80, height: 80)
         case .accountButtonSignedOut, .accountButtonSignedIn, .accountButtonLongName, .accountButtonNeedsReauthentication:
             CGSize(width: 260, height: 60)
-        case .accountPopoverSignedOut, .accountPopoverWorking, .accountPopoverExpired, .accountPopoverSignedIn:
+        case .accountPopoverSignedOut, .accountPopoverWorking, .accountPopoverExpired, .accountPopoverSignedIn, .accountPopoverOtherMarketplaces:
             CGSize(width: 280, height: 240)
-        case .tileUnselected, .tileSelected, .tileNoCover, .tileLongTitle, .tileNoRuntime, .tileDisabled, .tileNotInLibrary,
+        case .tileUnselected, .tileSelected, .tileNoCover, .tileLongTitle, .tileNoRuntime, .tileDisabled, .tileNotInLibrary, .tileOtherMarketplace,
              .tileQueued, .tileDownloading, .tileExporting, .tileFailed, .tileDownloaded, .tileExported:
             CGSize(width: 200, height: 280)
-        case .gridSignedOut, .gridLoading, .gridEmpty, .gridBooks, .gridSelection, .gridNoSearchResults:
+        case .gridSignedOut, .gridLoading, .gridCheckingMarketplaces, .gridEmpty, .gridBooks, .gridSelection, .gridNoSearchResults:
             CGSize(width: 900, height: 560)
-        case .messagesNone, .messagesOne, .messagesSeveral: CGSize(width: 700, height: 110)
+        case .messagesNone, .messagesOne, .messagesSeveral, .messagesNotice: CGSize(width: 700, height: 110)
         case .exportButtonNoSelection, .exportButtonReady, .exportButtonRunning: CGSize(width: 220, height: 60)
         case .exportFolderNone, .exportFolderSet, .exportFolderRunning: CGSize(width: 300, height: 160)
         case .jobRowQueued, .jobRowLicensing, .jobRowDownloading, .jobRowConverting, .jobRowFinalizing, .jobRowNotCancellable,
@@ -86,6 +86,10 @@ enum PreviewCatalog {
         case .accountPopoverWorking: return accountPopover(canSignIn: false)
         case .accountPopoverExpired: return accountPopover(needsReauthentication: true, canSignIn: true, canSignOut: true)
         case .accountPopoverSignedIn: return accountPopover(account: PreviewData.session, canSignOut: true)
+        case .accountPopoverOtherMarketplaces:
+            return accountPopover(account: PreviewData.session, otherMarketplaces: [
+                LibraryViewModel.MarketplaceCount(marketplace: .uk, count: 12), LibraryViewModel.MarketplaceCount(marketplace: .japan, count: 3),
+            ], canSignOut: true)
 
         case .tileUnselected: return tile(books[0])
         case .tileSelected: return tile(books[0], BookTileState(isSelected: true))
@@ -94,6 +98,7 @@ enum PreviewCatalog {
         case .tileNoRuntime: return tile(books[7])
         case .tileDisabled: return tile(books[0], canSelect: false)
         case .tileNotInLibrary: return tile(books[1], PreviewData.tileState(isInLibrary: false, status: .downloaded))
+        case .tileOtherMarketplace: return tile(books[3], BookTileState(marketplaceBadge: "UK", status: .downloaded))
         case .tileQueued: return tile(books[1], PreviewData.tileState(status: .queued(.download)))
         case .tileDownloading: return tile(books[1], PreviewData.tileState(status: .running(.download, progress: 0.4)))
         case .tileExporting: return tile(books[1], PreviewData.tileState(status: .running(.export, progress: 0.7)))
@@ -103,6 +108,7 @@ enum PreviewCatalog {
 
         case .gridSignedOut: return grid([], isSignedIn: false)
         case .gridLoading: return grid([], isLoading: true)
+        case .gridCheckingMarketplaces: return grid([], isCheckingMarketplaces: true)
         case .gridEmpty: return grid([])
         case .gridBooks: return grid(books)
         case .gridSelection: return grid(books, selected: [books[1].asin, books[3].asin, books[6].asin])
@@ -116,6 +122,8 @@ enum PreviewCatalog {
                 "Audible returned HTTP 503 (Service Unavailable) while loading page 3 of your library. Try refreshing in a few minutes.",
                 "The export folder is not available or not writable: /Volumes/Archive/Audiobooks/Exports",
             ]))
+        case .messagesNotice:
+            return AnyView(MessagesBar(messages: [], notices: ["Couldn’t check the Audible Japan, India marketplaces for more titles."]))
 
         case .exportButtonNoSelection: return exportButton(canExport: false)
         case .exportButtonReady: return exportButton(canExport: true)
@@ -160,10 +168,12 @@ enum PreviewCatalog {
     }
 
     private static func accountPopover(
-        account: AudibleSession? = nil, needsReauthentication: Bool = false, canSignIn: Bool = false, canSignOut: Bool = false
+        account: AudibleSession? = nil, otherMarketplaces: [LibraryViewModel.MarketplaceCount] = [],
+        needsReauthentication: Bool = false, canSignIn: Bool = false, canSignOut: Bool = false
     ) -> AnyView {
         AnyView(AccountPopoverContent(
             account: account,
+            otherMarketplaces: otherMarketplaces,
             needsReauthentication: needsReauthentication,
             marketplace: .constant(.us),
             canChangeMarketplace: canSignIn,
@@ -179,15 +189,23 @@ enum PreviewCatalog {
     }
 
     private static func grid(
-        _ books: [Audiobook], selected: Set<String> = [], isLibraryEmpty: Bool? = nil, isSignedIn: Bool = true, isLoading: Bool = false
+        _ books: [Audiobook], selected: Set<String> = [], isLibraryEmpty: Bool? = nil, isSignedIn: Bool = true, isLoading: Bool = false,
+        isCheckingMarketplaces: Bool = false
     ) -> AnyView {
         AnyView(LibraryGridContent(
             books: books,
             isLibraryEmpty: isLibraryEmpty ?? books.isEmpty,
             isSignedIn: isSignedIn,
             isLoading: isLoading,
+            isCheckingMarketplaces: isCheckingMarketplaces,
             canSelect: isSignedIn && !books.isEmpty,
-            tile: { BookTileState(isSelected: selected.contains($0.asin), menuItems: [BookMenuItem(.download)]) },
+            tile: { book in
+                BookTileState(
+                    isSelected: selected.contains(book.asin),
+                    marketplaceBadge: book.marketplace == PreviewData.session.marketplace ? nil : book.marketplace.id.uppercased(),
+                    menuItems: [BookMenuItem(.download)]
+                )
+            },
             toggle: { _ in },
             perform: { _, _ in }
         ))
@@ -244,16 +262,18 @@ enum PreviewCatalog {
 @MainActor
 enum PreviewData {
     /// Ten books: varied titles, authors, and runtimes. Books 2 and 8 have no cover, book 7 no runtime.
+    /// Books 3 and 8 are from the UK store and book 6 from Japan; the rest from the US (home).
     static let books: [Audiobook] = {
         let colors: [NSColor] = [.systemIndigo, .systemTeal, .systemOrange, .systemPink, .systemGreen, .systemBrown, .systemPurple, .systemRed]
         func cover(_ index: Int) -> URL? { coverURL(colors[index % colors.count], name: "cover\(index)") }
         return [
-            Audiobook(asin: "PREVIEW001", title: "The Lighthouse Keeper's Atlas", authors: ["Mara Ellison"], narrators: ["Tom Avery"], runtimeMinutes: 642, coverImageURL: cover(0)),
-            Audiobook(asin: "PREVIEW002", title: "A Short History of Tea", authors: ["Henrik Dahl"], runtimeMinutes: 318, coverImageURL: cover(1)),
-            Audiobook(asin: "PREVIEW003", title: "Signals from the Deep", authors: ["Ada Okafor"], runtimeMinutes: 875),
-            Audiobook(asin: "PREVIEW004", title: "Winter in Valparaíso", authors: ["Lucía Ferrer"], narrators: ["Ana Ruiz"], runtimeMinutes: 501, coverImageURL: cover(3)),
+            Audiobook(asin: "PREVIEW001", marketplace: .us, title: "The Lighthouse Keeper's Atlas", authors: ["Mara Ellison"], narrators: ["Tom Avery"], runtimeMinutes: 642, coverImageURL: cover(0)),
+            Audiobook(asin: "PREVIEW002", marketplace: .us, title: "A Short History of Tea", authors: ["Henrik Dahl"], runtimeMinutes: 318, coverImageURL: cover(1)),
+            Audiobook(asin: "PREVIEW003", marketplace: .us, title: "Signals from the Deep", authors: ["Ada Okafor"], runtimeMinutes: 875),
+            Audiobook(asin: "PREVIEW004", marketplace: .uk, title: "Winter in Valparaíso", authors: ["Lucía Ferrer"], narrators: ["Ana Ruiz"], runtimeMinutes: 501, coverImageURL: cover(3)),
             Audiobook(
                 asin: "PREVIEW005",
+                marketplace: .us,
                 title: "The Clockmaker's Daughter and the Brass Meridian: Being the First Book of the Long Winter Saga",
                 subtitle: "A Novel",
                 authors: ["Eleanor Whitcombe-Hartley", "Jonathan R. Pemberton", "Siobhán Ní Bhriain"],
@@ -261,11 +281,11 @@ enum PreviewData {
                 runtimeMinutes: 1_934,
                 coverImageURL: cover(4)
             ),
-            Audiobook(asin: "PREVIEW006", title: "Notes on Quiet", authors: ["Kenji Mori"], runtimeMinutes: 196, coverImageURL: cover(5)),
-            Audiobook(asin: "PREVIEW007", title: "Field Guide to Small Machines", authors: ["Priya Raman", "Leo Brandt"], runtimeMinutes: 412, coverImageURL: cover(6)),
-            Audiobook(asin: "PREVIEW008", title: "The Seventh Orchard", authors: ["Ruth Calloway"], coverImageURL: cover(7)),
-            Audiobook(asin: "PREVIEW009", title: "Ninety Days North", authors: ["Sam Okonkwo"], runtimeMinutes: 733),
-            Audiobook(asin: "PREVIEW010", title: "Paper Rivers", authors: ["Ines Varga"], runtimeMinutes: 288, coverImageURL: cover(1)),
+            Audiobook(asin: "PREVIEW006", marketplace: .us, title: "Notes on Quiet", authors: ["Kenji Mori"], runtimeMinutes: 196, coverImageURL: cover(5)),
+            Audiobook(asin: "PREVIEW007", marketplace: .japan, title: "Field Guide to Small Machines", authors: ["Priya Raman", "Leo Brandt"], runtimeMinutes: 412, coverImageURL: cover(6)),
+            Audiobook(asin: "PREVIEW008", marketplace: .us, title: "The Seventh Orchard", authors: ["Ruth Calloway"], coverImageURL: cover(7)),
+            Audiobook(asin: "PREVIEW009", marketplace: .uk, title: "Ninety Days North", authors: ["Sam Okonkwo"], runtimeMinutes: 733),
+            Audiobook(asin: "PREVIEW010", marketplace: .us, title: "Paper Rivers", authors: ["Ines Varga"], runtimeMinutes: 288, coverImageURL: cover(1)),
         ]
     }()
 
@@ -449,10 +469,10 @@ private struct PreviewAPI: AudibleAPI {
 
     func refresh(_ session: AudibleSession) async throws -> AudibleSession { session }
 
-    func libraryPage(_ number: Int, pageSize: Int, session: AudibleSession) async throws -> LibraryPage {
+    func libraryPage(_ number: Int, pageSize: Int, marketplace: Marketplace, session: AudibleSession) async throws -> LibraryPage {
         switch library {
         case .books(let books):
-            let entries = books.map { LibraryEntry(book: $0, contentDeliveryType: "SinglePartBook", contentType: "Product", isAYCE: false) }
+            let entries = books.filter { $0.marketplace == marketplace }.map { LibraryEntry(book: $0, contentDeliveryType: "SinglePartBook", contentType: "Product", isAYCE: false) }
             return LibraryPage(entries: number == 1 ? entries : [], totalCount: books.count)
         case .loading:
             try await Task.sleep(for: .seconds(365 * 24 * 3600))
@@ -462,7 +482,7 @@ private struct PreviewAPI: AudibleAPI {
         }
     }
 
-    func license(for asin: String, session: AudibleSession) async throws -> ContentLicense {
+    func license(for asin: String, marketplace: Marketplace, session: AudibleSession) async throws -> ContentLicense {
         throw ExporterError.licenseDenied(asin: asin, reason: "Previews cannot download.")
     }
 }

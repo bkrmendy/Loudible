@@ -27,22 +27,24 @@ enum LibraryRequest {
 }
 
 enum LibraryParser {
-    static func page(from data: Data, response: HTTPURLResponse) throws(ExporterError) -> LibraryPage {
+    /// Parses a page of the library held in `marketplace`; every book is tagged with it.
+    static func page(from data: Data, response: HTTPURLResponse, marketplace: Marketplace) throws(ExporterError) -> LibraryPage {
         try AudibleAPIStatus.check(data: data, response: response)
         let json = JSON(data: data)
         guard let items = json["items"].array else {
             throw .malformedResponse("Library response has no items.")
         }
         let totalCount = response.value(forHTTPHeaderField: "Total-Count").flatMap { Int($0) }
-        return LibraryPage(entries: items.compactMap(entry), totalCount: totalCount)
+        return LibraryPage(entries: items.compactMap { entry($0, marketplace: marketplace) }, totalCount: totalCount)
     }
 
     /// Items without an ASIN cannot be exported or deduplicated and are skipped.
-    static func entry(_ item: JSON) -> LibraryEntry? {
+    static func entry(_ item: JSON, marketplace: Marketplace) -> LibraryEntry? {
         guard let asin = item["asin"].string, !asin.isEmpty else { return nil }
         let title = item["title"].string.flatMap { $0.isEmpty ? nil : $0 } ?? asin
         let book = Audiobook(
             asin: asin,
+            marketplace: marketplace,
             title: title,
             subtitle: item["subtitle"].string,
             authors: names(item["authors"]),

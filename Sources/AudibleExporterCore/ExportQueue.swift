@@ -338,7 +338,7 @@ public actor ExportQueue {
     private func fetchLicense(for book: Audiobook) async throws(ExporterError) -> ContentLicense {
         let api = self.api
         return try await auth.withValidSession { session in
-            try await api.license(for: book.asin, session: session)
+            try await api.license(for: book.asin, marketplace: book.marketplace, session: session)
         }
     }
 

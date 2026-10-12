@@ -5,7 +5,7 @@ import TestSupport
 
 @Suite struct ExportFileNamingTests {
     @Test func usesTitleAndASIN() {
-        #expect(ExportFileNaming.baseName(for: Audiobook(asin: "B0123", title: "Project Hail Mary")) == "Project Hail Mary [B0123]")
+        #expect(ExportFileNaming.baseName(for: Audiobook(asin: "B0123", marketplace: .us, title: "Project Hail Mary")) == "Project Hail Mary [B0123]")
         #expect(ExportFileNaming.fileName(base: "X [B1]", attempt: 1) == "X [B1].m4b")
         #expect(ExportFileNaming.fileName(base: "X [B1]", attempt: 3) == "X [B1] (3).m4b")
     }
@@ -25,11 +25,11 @@ import TestSupport
     }
 
     @Test func sanitizesASIN() {
-        #expect(ExportFileNaming.baseName(for: Audiobook(asin: "B0/../1", title: "T")) == "T [B01]")
+        #expect(ExportFileNaming.baseName(for: Audiobook(asin: "B0/../1", marketplace: .us, title: "T")) == "T [B01]")
     }
 
     @Test func longTitlesFitFileNameLimitWithCollisionSuffix() {
-        let book = Audiobook(asin: "B000000001", title: String(repeating: "Ü", count: 400))
+        let book = Audiobook(asin: "B000000001", marketplace: .us, title: String(repeating: "Ü", count: 400))
         let name = ExportFileNaming.fileName(base: ExportFileNaming.baseName(for: book), attempt: 9999)
         #expect(name.utf8.count <= 255)
         #expect(name.hasSuffix(" [B000000001] (9999).m4b"))
@@ -47,9 +47,9 @@ import TestSupport
     }
 
     @Test func extensionParameter() {
-        let book = Audiobook(asin: "B1", title: "X")
+        let book = Audiobook(asin: "B1", marketplace: .us, title: "X")
         #expect(ExportFileNaming.fileName(base: ExportFileNaming.baseName(for: book, extension: "aaxc"), attempt: 2, extension: "aaxc") == "X [B1] (2).aaxc")
-        let long = Audiobook(asin: "B000000001", title: String(repeating: "Ü", count: 400))
+        let long = Audiobook(asin: "B000000001", marketplace: .us, title: String(repeating: "Ü", count: 400))
         #expect(ExportFileNaming.fileName(base: ExportFileNaming.baseName(for: long, extension: "aaxc"), attempt: 9999, extension: "aaxc").utf8.count <= 255)
     }
 

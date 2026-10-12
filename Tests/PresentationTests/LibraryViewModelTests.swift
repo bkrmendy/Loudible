@@ -17,8 +17,14 @@ import TestSupport
         return model
     }
 
-    func scriptLibrary(_ asins: [String]) {
-        api.libraryHandler.withLock { $0 = { _, _, _ in LibraryPage(entries: asins.map { Fixtures.entry($0) }) } }
+    /// The home (US) store holds `asins`; `foreign` maps other stores to theirs; the rest are empty.
+    func scriptLibrary(_ asins: [String], foreign: [Marketplace: [String]] = [:]) {
+        api.libraryHandler.withLock {
+            $0 = { _, _, marketplace, _ in
+                let held = marketplace == .us ? asins : foreign[marketplace] ?? []
+                return LibraryPage(entries: held.map { Fixtures.entry($0, marketplace: marketplace) })
+            }
+        }
     }
 
     @Test func startsIdleWithActionsDisabledWhenSignedOut() async throws {
@@ -32,7 +38,9 @@ import TestSupport
 
     @Test func showsLoadingThenLoaded() async throws {
         let gate = AsyncGate()
-        api.libraryHandler.withLock { $0 = { _, _, _ in await gate.wait(); return LibraryPage(entries: [Fixtures.entry("B1")]) } }
+        api.libraryHandler.withLock {
+            $0 = { _, _, marketplace, _ in await gate.wait(); return LibraryPage(entries: marketplace == .us ? [Fixtures.entry("B1")] : []) }
+        }
         let model = try await makeModel()
         let refresh = Task { await model.refresh() }
         try await waitUntil { await model.isLoading }
@@ -51,7 +59,7 @@ import TestSupport
         await model.refresh()
         model.toggleSelection("B1")
 
-        api.libraryHandler.withLock { $0 = { _, _, _ in throw ExporterError.http(status: 503, message: nil) } }
+        api.libraryHandler.withLock { $0 = { _, _, _, _ in throw ExporterError.http(status: 503, message: nil) } }
         await model.refresh()
         #expect(model.books.map(\.asin) == ["B1", "B2"])
         #expect(model.isSelected("B1"))
@@ -73,8 +81,9 @@ import TestSupport
 
     @Test func searchFiltersVisibleBooksAndSelectAllUsesThem() async throws {
         api.libraryHandler.withLock {
-            $0 = { _, _, _ in
-                LibraryPage(entries: [Fixtures.entry("B1", title: "Alpha"), Fixtures.entry("B2", title: "Beta"), Fixtures.entry("B3", title: "Alphabet")])
+            $0 = { _, _, marketplace, _ in
+                guard marketplace == .us else { return LibraryPage(entries: []) }
+                return LibraryPage(entries: [Fixtures.entry("B1", title: "Alpha"), Fixtures.entry("B2", title: "Beta"), Fixtures.entry("B3", title: "Alphabet")])
             }
         }
         let model = try await makeModel()
@@ -139,5 +148,116 @@ import TestSupport
         #expect(model.books.map(\.asin) == ["B9"])
         model.reset()
         #expect(model.books.isEmpty)
+    }
+
+    // MARK: Other marketplaces
+
+    @Test func mergesTitlesFromOtherStoresAndTagsThem() async throws {
+        scriptLibrary(["U1", "U2"], foreign: [.uk: ["K1", "U1"], .japan: ["J1"]])
+        let model = try await makeModel()
+        await model.refresh()
+        #expect(model.books.map(\.asin) == ["U1", "U2", "K1", "J1"])
+        #expect(model.books[0].marketplace == .us) // the home copy wins
+        #expect(model.homeMarketplace == .us)
+        #expect(model.marketplaceBadge(for: model.books[0]) == nil)
+        #expect(model.marketplaceBadge(for: model.books[2]) == "UK")
+        #expect(model.isInLibrary("J1"))
+        #expect(model.otherMarketplaces == [
+            LibraryViewModel.MarketplaceCount(marketplace: .uk, count: 1),
+            LibraryViewModel.MarketplaceCount(marketplace: .japan, count: 1),
+        ])
+        #expect(model.summary == "4 books · also in United Kingdom, Japan")
+        #expect(!model.isCheckingMarketplaces)
+        #expect(model.canRefresh)
+    }
+
+    @Test func homeBooksShowBeforeOtherStoresAnswer() async throws {
+        let gate = AsyncGate()
+        api.libraryHandler.withLock {
+            $0 = { _, _, marketplace, _ in
+                if marketplace == .us { return LibraryPage(entries: [Fixtures.entry("U1")]) }
+                await gate.wait()
+                return LibraryPage(entries: marketplace == .uk ? [Fixtures.entry("K1", marketplace: .uk)] : [])
+            }
+        }
+        let model = try await makeModel()
+        let refresh = Task { await model.refresh() }
+        try await waitUntil { await model.isCheckingMarketplaces }
+        #expect(model.loadState == .loaded)
+        #expect(model.books.map(\.asin) == ["U1"])
+        #expect(!model.canRefresh)
+        await gate.open()
+        await refresh.value
+        #expect(model.books.map(\.asin) == ["U1", "K1"])
+        #expect(!model.isCheckingMarketplaces)
+    }
+
+    @Test func selectedTitleFromAnotherStoreSurvivesRefresh() async throws {
+        scriptLibrary(["U1"], foreign: [.uk: ["K1"]])
+        let model = try await makeModel()
+        await model.refresh()
+        model.setSelection(["U1", "K1"])
+
+        await model.refresh()
+        #expect(model.selection.asins == ["U1", "K1"])
+
+        scriptLibrary(["U1"])
+        await model.refresh()
+        #expect(model.selection.asins == ["U1"])
+        #expect(model.otherMarketplaces.isEmpty)
+    }
+
+    @Test func storesThatFailAreANoticeNotAnError() async throws {
+        let model = try await makeModel()
+        scriptLibrary(["U1"], foreign: [.india: ["I1"]])
+        await model.refresh()
+        #expect(model.books.map(\.asin) == ["U1", "I1"])
+
+        api.libraryHandler.withLock {
+            $0 = { _, _, marketplace, _ in
+                switch marketplace {
+                case .us: return LibraryPage(entries: [Fixtures.entry("U1")])
+                case .japan, .india: throw ExporterError.authenticationRequired
+                default: return LibraryPage(entries: [])
+                }
+            }
+        }
+        await model.refresh()
+        #expect(model.errorMessage == nil)
+        #expect(model.loadState == .loaded)
+        #expect(model.uncheckedMarketplaces == [.india, .japan])
+        #expect(model.marketplaceNotice == "Couldn’t check the Audible India, Japan marketplaces for more titles.")
+        // What India held last time stays until it answers again.
+        #expect(model.books.map(\.asin) == ["U1", "I1"])
+        #expect(model.isSignedIn)
+    }
+
+    @Test func failedHomeLoadSkipsOtherStores() async throws {
+        api.libraryHandler.withLock { $0 = { _, _, _, _ in throw ExporterError.http(status: 503, message: nil) } }
+        let model = try await makeModel()
+        await model.refresh()
+        #expect(model.errorMessage?.contains("503") == true)
+        #expect(api.requestedMarketplaces.current == [.us])
+    }
+
+    @Test func resetCancelsTheMarketplaceCheck() async throws {
+        let gate = AsyncGate()
+        api.libraryHandler.withLock {
+            $0 = { _, _, marketplace, _ in
+                if marketplace == .us { return LibraryPage(entries: [Fixtures.entry("U1")]) }
+                await gate.wait()
+                return LibraryPage(entries: [Fixtures.entry("X-\(marketplace.id)", marketplace: marketplace)])
+            }
+        }
+        let model = try await makeModel()
+        let refresh = Task { await model.refresh() }
+        try await waitUntil { await model.isCheckingMarketplaces }
+        model.reset()
+        #expect(!model.isCheckingMarketplaces)
+        await gate.open()
+        await refresh.value
+        #expect(model.books.isEmpty)
+        #expect(model.otherMarketplaces.isEmpty)
+        #expect(api.requestedMarketplaces.current.count == 2)
     }
 }

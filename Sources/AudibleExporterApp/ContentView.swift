@@ -16,11 +16,13 @@ struct ContentView: View {
             isLibraryEmpty: library.books.isEmpty,
             isSignedIn: library.isSignedIn,
             isLoading: library.isLoading,
+            isCheckingMarketplaces: library.isCheckingMarketplaces,
             canSelect: library.canSelect,
             tile: { book in
                 BookTileState(
                     isSelected: library.isSelected(book.asin),
                     isInLibrary: library.isInLibrary(book.asin),
+                    marketplaceBadge: library.marketplaceBadge(for: book),
                     status: model.status(for: book),
                     menuItems: model.menuItems(for: book)
                 )
@@ -34,9 +36,12 @@ struct ContentView: View {
         )
         .toolbar { toolbar }
         .bar(edge: .top) {
-            MessagesBar(messages: [
-                model.session.errorMessage, model.library.errorMessage, model.export.errorMessage,
-            ].compactMap { $0 })
+            MessagesBar(
+                messages: [
+                    model.session.errorMessage, model.library.errorMessage, model.export.errorMessage,
+                ].compactMap { $0 },
+                notices: [model.library.marketplaceNotice].compactMap { $0 }
+            )
         }
         .confirmationDialog(
             "Move “\(pendingDelete?.title ?? "")” to the Trash?",
@@ -65,6 +70,9 @@ struct ContentView: View {
         ToolbarItem(placement: .primaryAction) {
             if model.library.isLoading {
                 ProgressView().controlSize(.small)
+            } else if model.library.isCheckingMarketplaces {
+                ProgressView().controlSize(.small)
+                    .help("Checking other Audible marketplaces for more titles…")
             } else {
                 Button("Refresh Library", systemImage: "arrow.clockwise") {
                     Task { await model.refreshLibrary() }

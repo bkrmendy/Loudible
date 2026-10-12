@@ -124,6 +124,15 @@ import TestSupport
         #expect(request.output.lastPathComponent.hasPrefix("."))
     }
 
+    @Test func requestsLicenseFromTheBooksMarketplace() async throws {
+        defer { cleanUp() }
+        let book = Fixtures.book("B000000001", title: "Book 1", marketplace: .uk)
+        let snapshot = try await runToCompletion([book], kind: .download)
+        #expect(snapshot.jobs.allSatisfy { $0.state.isFinished })
+        #expect(api.requestedLicenseMarketplaces.current == [.uk])
+        #expect(downloads.manifest(for: book.asin)?.book.marketplace == .uk)
+    }
+
     @Test func numbersCollidingNames() async throws {
         defer { cleanUp() }
         let existing = destination.url.appendingPathComponent("Book 1 [B000000001].m4b")

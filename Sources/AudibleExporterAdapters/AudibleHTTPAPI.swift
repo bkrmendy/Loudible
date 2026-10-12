@@ -35,16 +35,19 @@ public struct AudibleHTTPAPI: AudibleAPI {
 
     // MARK: Library and licenses
 
-    public func libraryPage(_ number: Int, pageSize: Int, session: AudibleSession) async throws -> LibraryPage {
-        let request = try signed(LibraryRequest.request(page: number, pageSize: pageSize, marketplace: session.marketplace), session: session)
+    // Signing covers method, path, query, date and body but not the host, so the session's
+    // device key signs requests to any store.
+
+    public func libraryPage(_ number: Int, pageSize: Int, marketplace: Marketplace, session: AudibleSession) async throws -> LibraryPage {
+        let request = try signed(LibraryRequest.request(page: number, pageSize: pageSize, marketplace: marketplace), session: session)
         let (data, response) = try await send(request)
-        return try LibraryParser.page(from: data, response: response)
+        return try LibraryParser.page(from: data, response: response, marketplace: marketplace)
     }
 
-    public func license(for asin: String, session: AudibleSession) async throws -> ContentLicense {
+    public func license(for asin: String, marketplace: Marketplace, session: AudibleSession) async throws -> ContentLicense {
         let unsigned: URLRequest
         do {
-            unsigned = try LicenseRequest.request(asin: asin, marketplace: session.marketplace)
+            unsigned = try LicenseRequest.request(asin: asin, marketplace: marketplace)
         } catch {
             throw ExporterError.unexpected("Could not encode license request: \(error)")
         }

@@ -61,6 +61,7 @@ private struct AccountPopover: View {
         @Bindable var session = model.session
         AccountPopoverContent(
             account: session.session,
+            otherMarketplaces: model.library.otherMarketplaces,
             needsReauthentication: session.needsReauthentication,
             marketplace: $session.marketplace,
             canChangeMarketplace: session.canChangeMarketplace,
@@ -89,6 +90,8 @@ private struct AccountPopover: View {
 /// when the session expired.
 struct AccountPopoverContent: View {
     let account: AudibleSession?
+    /// Other stores whose titles are in the library.
+    var otherMarketplaces: [LibraryViewModel.MarketplaceCount] = []
     let needsReauthentication: Bool
     @Binding var marketplace: Marketplace
     let canChangeMarketplace: Bool
@@ -106,6 +109,12 @@ struct AccountPopoverContent: View {
                         Text(account.customerName ?? "Signed in").font(.headline)
                         Text("Audible \(account.marketplace.name)").foregroundStyle(.secondary)
                     }
+                }
+                if !otherMarketplaces.isEmpty {
+                    Text("Also has titles in " + otherMarketplaces.map { "\($0.marketplace.name) (\($0.count))" }.joined(separator: ", "))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
                 if needsReauthentication {
@@ -187,4 +196,5 @@ struct AccountAvatar: View {
 #Preview("Account popover – working") { PreviewCatalog.view(.accountPopoverWorking) }
 #Preview("Account popover – session expired") { PreviewCatalog.view(.accountPopoverExpired) }
 #Preview("Account popover – signed in") { PreviewCatalog.view(.accountPopoverSignedIn) }
+#Preview("Account popover – other marketplaces") { PreviewCatalog.view(.accountPopoverOtherMarketplaces) }
 #endif
