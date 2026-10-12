@@ -1,7 +1,7 @@
 import Foundation
 import Testing
-import AudibleExporterCore
-import AudibleExporterPresentation
+import LoudibleCore
+import LoudiblePresentation
 import TestSupport
 
 @MainActor
@@ -39,6 +39,14 @@ import TestSupport
         let (model, _) = await makeModel()
         #expect(model.errorMessage != nil)
         #expect(!model.isSignedIn)
+        #expect(model.hasRestored)
+    }
+
+    @Test func hasRestoredOnlyAfterStart() async {
+        let model = SessionViewModel(auth: AuthenticationCoordinator(api: api, store: store, clock: TestClock()))
+        #expect(!model.hasRestored)
+        await model.start()
+        #expect(model.hasRestored)
     }
 
     @Test func signInFlowWithBrowserCallback() async throws {

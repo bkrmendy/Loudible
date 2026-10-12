@@ -1,3 +1,0 @@
-import AudibleExporterApp
-
-Launcher.main()

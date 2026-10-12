@@ -1,7 +1,7 @@
 import Foundation
 import Testing
-@testable import AudibleExporterAdapters
-import AudibleExporterCore
+@testable import LoudibleAdapters
+import LoudibleCore
 import TestSupport
 
 @Suite struct PKCETests {
@@ -276,7 +276,7 @@ import TestSupport
 
         let session = Fixtures.session()
         try store.save(session)
-        #expect(keychain.lastQuery.current[kSecAttrService as String] as? String == "AudibleExporter.AudibleSession")
+        #expect(keychain.lastQuery.current[kSecAttrService as String] as? String == "Loudible.AudibleSession")
         #expect(keychain.lastQuery.current[kSecClass as String] as! CFString == kSecClassGenericPassword)
         #expect(try store.load() == session)
 

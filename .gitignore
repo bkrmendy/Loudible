@@ -8,7 +8,7 @@ build/
 # FFmpeg source tarball and LGPL build from Scripts/build-ffmpeg.sh (re-created on demand)
 Vendor/
 
-# Xcode: App/AudibleExporter.xcodeproj is committed; per-user state is not
+# Xcode: App/Loudible.xcodeproj is committed; per-user state is not
 xcuserdata/
 DerivedData/
 

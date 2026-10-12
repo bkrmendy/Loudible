@@ -1,4 +1,4 @@
-# AudibleExporter (native macOS)
+# Loudible (native macOS)
 
 A small SwiftUI app that signs in to Audible, lists the audiobooks you bought, and exports the
 selected ones to M4B files. It is independent of Libation: it does not use or change Libation's
@@ -12,13 +12,13 @@ settings, database, or folders.
   run for you. It downloads the release pinned in `Scripts/ffmpeg-version.sh`, checks its SHA-256,
   and installs a minimal LGPL build into `Vendor/` (about a minute, done once).
 
-The code is a Swift package. `App/AudibleExporter.xcodeproj` wraps it in an app target: open it,
+The code is a Swift package. `App/Loudible.xcodeproj` wraps it in an app target: open it,
 press ⌘R to run, and use the canvas to see every view state as a preview. Build FFmpeg once first:
 
 ```sh
 cd NativeMac
 Scripts/build-ffmpeg.sh
-open App/AudibleExporter.xcodeproj
+open App/Loudible.xcodeproj
 ```
 
 From the terminal, source `Scripts/env.sh` before `swift` commands; it selects Xcode's toolchain
@@ -49,12 +49,12 @@ Keychain. Download tests use a local HTTP server on 127.0.0.1. All fixtures are 
 ## Build and run the app
 
 ```sh
-Scripts/build-app.sh     # builds the Xcode project into build/AudibleExporter.app (ad-hoc signed)
+Scripts/build-app.sh     # builds the Xcode project into build/Loudible.app (ad-hoc signed)
 Scripts/verify-app.sh    # checks ARM64, signatures, bundled libraries, and that FFmpeg loads
-open build/AudibleExporter.app
+open build/Loudible.app
 ```
 
-For development you can also run `source Scripts/env.sh && swift run AudibleExporter`.
+For development you can also run `source Scripts/env.sh && swift run Loudible`.
 
 The app runs on macOS 14 or newer. `build-app.sh` copies the three FFmpeg libraries
 (libavformat, libavcodec, libavutil) into `Contents/Frameworks`, rewrites their install names
@@ -90,7 +90,7 @@ To upgrade FFmpeg, follow the steps at the top of `Scripts/ffmpeg-version.sh`.
 2. Your purchased library loads. Audible Plus catalog titles, podcasts, and series or podcast
    containers are hidden. Search and select one or more books.
 3. **Download** keeps a book's encrypted Audible file (`Title [ASIN].aaxc`, or `.aax` for
-   legacy titles) in `~/Documents/AudibleExporter/`. **Export** turns it into
+   legacy titles) in `~/Documents/Loudible/`. **Export** turns it into
    `Title [ASIN].m4b` in the export folder: the audio is not re-encoded; chapters, metadata,
    and cover art are kept. Exporting a book that is not downloaded yet downloads it first and
    keeps the file. If a file with that name already exists, the new one gets a numbered
@@ -111,7 +111,7 @@ The app checks the folders at launch, after Refresh Library, when it becomes act
 each job, so files renamed, moved, or deleted in Finder are picked up. A book counts as
 downloaded when the download folder has a `.aax`/`.aaxc` file whose name contains `[ASIN]`.
 
-Credentials are stored in one Keychain item, `AudibleExporter.AudibleSession`. **Sign Out**
+Credentials are stored in one Keychain item, `Loudible.AudibleSession`. **Sign Out**
 deletes that item but does not deregister the device on Amazon's side; it cancels running jobs
 and keeps finished files. The decryption keys, chapters, and cover of each download are saved
 as `<ASIN>.json` and `<ASIN>.cover` (mode 0600) in
@@ -122,12 +122,12 @@ key material.
 
 | Target | Role |
 | --- | --- |
-| `AudibleExporterCore` | Models, authentication lifecycle, library rules, selection, the download/export scheduler, kept downloads and their manifests, book status and menu rules, file naming. Foundation only. |
-| `AudibleExporterAdapters` | Audible HTTP API (PKCE login, device registration, request signing, token refresh, library, licenses, vouchers), Keychain, URLSession downloads. |
-| `AudibleExporterFFmpeg`, `FFmpegBridge`, `CFFmpegHeaders` | In-process decryption and remuxing: `aex_remux_to_m4b` in C against FFmpeg's API, wrapped by `FFmpegConverter`. |
-| `AudibleExporterPresentation` | `@Observable` view models: session, library, export, app wiring. |
-| `AudibleExporterApp` | SwiftUI window, WKWebView login, folder picker, previews. No business logic. |
-| `AudibleExporter`, `App/AudibleExporter.xcodeproj` | Launchers for `swift run` and Xcode. |
+| `LoudibleCore` | Models, authentication lifecycle, library rules, selection, the download/export scheduler, kept downloads and their manifests, book status and menu rules, file naming. Foundation only. |
+| `LoudibleAdapters` | Audible HTTP API (PKCE login, device registration, request signing, token refresh, library, licenses, vouchers), Keychain, URLSession downloads. |
+| `LoudibleFFmpeg`, `FFmpegBridge`, `CFFmpegHeaders` | In-process decryption and remuxing: `aex_remux_to_m4b` in C against FFmpeg's API, wrapped by `FFmpegConverter`. |
+| `LoudiblePresentation` | `@Observable` view models: session, library, export, app wiring. |
+| `LoudibleApp` | SwiftUI window, WKWebView login, folder picker, previews. No business logic. |
+| `Loudible`, `App/Loudible.xcodeproj` | Launchers for `swift run` and Xcode. |
 
 ## Not verified automatically
 

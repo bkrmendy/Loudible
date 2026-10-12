@@ -1,12 +1,12 @@
 #!/bin/bash
-# Checks build/AudibleExporter.app: ARM64 only, macOS 14 minimum, valid signatures, only the
+# Checks build/Loudible.app: ARM64 only, macOS 14 minimum, valid signatures, only the
 # three bundled FFmpeg libraries (no Homebrew or other non-system paths), LGPL notices, and
 # that the bundled FFmpeg loads, is LGPL-licensed, and has every required component.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source Scripts/ffmpeg-version.sh
-APP="${1:-build/AudibleExporter.app}"
-EXECUTABLE="$APP/Contents/MacOS/AudibleExporter"
+APP="${1:-build/Loudible.app}"
+EXECUTABLE="$APP/Contents/MacOS/Loudible"
 FRAMEWORKS="$APP/Contents/Frameworks"
 RESOURCES="$APP/Contents/Resources"
 failures=0
@@ -59,7 +59,7 @@ for file in THIRD_PARTY_NOTICES.txt Credits.html Licenses/FFmpeg/COPYING.LGPLv2.
 done
 
 # Launch the bundled executable headlessly and record every image dyld loads.
-log="$(mktemp -t audibleexporter-dyld)"
+log="$(mktemp -t loudible-dyld)"
 if DYLD_PRINT_LIBRARIES=1 "$EXECUTABLE" --self-test >"$log" 2>&1; then
     grep -E "self-test|^license|^missing" "$log"
     if grep -E "/opt/homebrew|/usr/local" "$log"; then

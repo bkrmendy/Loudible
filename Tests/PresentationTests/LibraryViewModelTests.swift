@@ -1,7 +1,7 @@
 import Foundation
 import Testing
-import AudibleExporterCore
-import AudibleExporterPresentation
+import LoudibleCore
+import LoudiblePresentation
 import TestSupport
 
 @MainActor

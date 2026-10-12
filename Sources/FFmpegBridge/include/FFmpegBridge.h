@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// The C side of AudibleExporter's FFmpeg use. Plain C types only, so FFmpeg's headers
+// The C side of Loudible's FFmpeg use. Plain C types only, so FFmpeg's headers
 // stay out of Swift. Functions returning int return 0 or a negative AVERROR code.
 
 /// A thread-safe flag polled by FFmpeg's interrupt callback and the remux loop.

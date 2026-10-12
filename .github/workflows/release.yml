@@ -1,4 +1,4 @@
-# Builds, tests and verifies AudibleExporter.app for every version tag (v1.2.3, v1.2.3-beta.1)
+# Builds, tests and verifies Loudible.app for every version tag (v1.2.3, v1.2.3-beta.1)
 # and publishes it as a GitHub release. Tags with a pre-release suffix become pre-releases.
 #
 # Next to the app the release carries the FFmpeg source tarball and Scripts/build-ffmpeg.sh,
@@ -60,7 +60,7 @@ jobs:
         run: |
           source Scripts/ffmpeg-version.sh
           mkdir -p dist
-          ditto -c -k --sequesterRsrc --keepParent build/AudibleExporter.app "dist/AudibleExporter-$TAG-arm64.zip"
+          ditto -c -k --sequesterRsrc --keepParent build/Loudible.app "dist/Loudible-$TAG-arm64.zip"
           cp "Vendor/downloads/ffmpeg-$FFMPEG_VERSION.tar.xz" dist/
           cp Scripts/build-ffmpeg.sh dist/
           (cd dist && shasum -a 256 * > SHA256SUMS.txt)
@@ -81,6 +81,6 @@ jobs:
           (\`ffmpeg-${FFMPEG_VERSION}.tar.xz\`) and the script that builds it (\`build-ffmpeg.sh\`) are attached.
           NOTES
           gh release create "$TAG" dist/* \
-              --title "AudibleExporter ${TAG#v}" \
+              --title "Loudible ${TAG#v}" \
               --notes-file notes.md --generate-notes \
               --verify-tag ${prerelease[@]+"${prerelease[@]}"}

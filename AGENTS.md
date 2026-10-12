@@ -1,6 +1,6 @@
 # AGENTS.md
 
-AudibleExporter is a small native macOS SwiftUI app: sign in to Audible, list the purchased
+Loudible is a small native macOS SwiftUI app: sign in to Audible, list the purchased
 library, export selected books to M4B. It lives inside the Libation checkout but is a **separate
 git repository** and an independent product. It shares no code, settings, database or folders
 with Libation, so the .NET instructions in `../AGENTS.md` do not apply here. `README.md` is the
@@ -16,9 +16,9 @@ user-facing description; read it for the export flow and FFmpeg licensing detail
 - **Before any raw `swift` command, `source Scripts/env.sh`.** It sets `DEVELOPER_DIR` to Xcode
   (unless already set) and checks that FFmpeg is built. `Package.swift` finds FFmpeg through the
   `Vendor/ffmpeg` symlink relative to itself, so Xcode needs no environment.
-- `App/AudibleExporter.xcodeproj` is a thin shell: one app target (`App/AudibleExporter/`,
-  `@main` calling `Launcher.main()`) that depends on the local package's `AudibleExporterApp`
-  library. It uses file-system-synchronized groups; new files in `App/AudibleExporter/` need no
+- `App/Loudible.xcodeproj` is a thin shell: one app target (`App/Loudible/`,
+  `@main` calling `Launcher.main()`) that depends on the local package's `LoudibleApp`
+  library. It uses file-system-synchronized groups; new files in `App/Loudible/` need no
   pbxproj edit. Bundle id, version and Info.plist keys live in its build settings and
   `App/Info.plist`. All other code belongs in the package.
 
@@ -28,13 +28,13 @@ Scripts/test.sh                        # the only test command: layering check, 
 Scripts/test.sh --filter ExportQueue   # a subset (args go to `swift test`)
 Scripts/check-layering.sh              # layering check alone
 source Scripts/env.sh && swift build   # compile check
-open App/AudibleExporter.xcodeproj      # run with ⌘R, previews in the canvas
-Scripts/build-app.sh                   # build/AudibleExporter.app via xcodebuild, release, ad-hoc signed
+open App/Loudible.xcodeproj      # run with ⌘R, previews in the canvas
+Scripts/build-app.sh                   # build/Loudible.app via xcodebuild, release, ad-hoc signed
 Scripts/verify-app.sh                  # arm64, minos, signatures, bundled dylibs, LGPL, FFmpeg loads
-source Scripts/env.sh && swift run AudibleExporter   # run for development
+source Scripts/env.sh && swift run Loudible   # run for development
 ```
 - Run tests through `Scripts/test.sh`, not bare `swift test`. It runs them under `sandbox-exec`
-  with all non-loopback network denied and sets `AUDIBLE_EXPORTER_TEST_SANDBOX=1`, and bounds each
+  with all non-loopback network denied and sets `LOUDIBLE_TEST_SANDBOX=1`, and bounds each
   step with `TEST_TIMEOUT` (default 900 s). It also works around Swift 6.4 losing the
   `TestingMacros` plugin on incremental builds.
 - Any change to packaging (`build-app.sh`, `bundle_dylibs.py`, `write-notices.py`, FFmpeg
@@ -45,12 +45,12 @@ source Scripts/env.sh && swift run AudibleExporter   # run for development
 ## Architecture and layering (enforced)
 | Target | May use |
 | --- | --- |
-| `AudibleExporterCore` | Foundation only. Models, auth lifecycle, library rules, export queue, file naming. Protocols for everything external live in `Dependencies.swift`. |
-| `AudibleExporterPresentation` | Core + Foundation/Observation. `@Observable` view models. |
-| `AudibleExporterAdapters` | Core. Audible HTTP API, request signing, Keychain, URLSession downloads. |
-| `AudibleExporterFFmpeg` / `FFmpegBridge` (C) / `CFFmpegHeaders` | Decrypt + remux via `aex_remux_to_m4b`, wrapped by `FFmpegConverter`. |
-| `AudibleExporterApp` (library) | SwiftUI/AppKit/WebKit views, `CompositionRoot`, `Launcher`, preview data. No business logic. |
-| `AudibleExporter` (executable) and the Xcode app target | Shells that call `Launcher.main()`. Nothing else. |
+| `LoudibleCore` | Foundation only. Models, auth lifecycle, library rules, export queue, file naming. Protocols for everything external live in `Dependencies.swift`. |
+| `LoudiblePresentation` | Core + Foundation/Observation. `@Observable` view models. |
+| `LoudibleAdapters` | Core. Audible HTTP API, request signing, Keychain, URLSession downloads. |
+| `LoudibleFFmpeg` / `FFmpegBridge` (C) / `CFFmpegHeaders` | Decrypt + remux via `aex_remux_to_m4b`, wrapped by `FFmpegConverter`. |
+| `LoudibleApp` (library) | SwiftUI/AppKit/WebKit views, `CompositionRoot`, `Launcher`, preview data. No business logic. |
+| `Loudible` (executable) and the Xcode app target | Shells that call `Launcher.main()`. Nothing else. |
 
 Views come in pairs: a pure *content* view (`AccountPopoverContent`, `LibraryGridContent`,
 `ExportButtonContent`, `LoginSheetContent`, …) that takes values, bindings and closures, and a
@@ -60,7 +60,7 @@ Previews and snapshots use the content views; keep new views to that split.
 `check-layering.sh` fails if Core or Presentation import SwiftUI/AppKit/WebKit/UIKit/Cocoa, or if
 the manifest gives them any dependency other than Core or any build settings. Put new logic in
 Core or Presentation behind a protocol, implement it in an adapter, and wire it up in
-`CompositionRoot` (`AudibleExporterApp.swift`).
+`CompositionRoot` (`LoudibleApp.swift`).
 
 ## Tests
 - Swift Testing (`import Testing`, `@Suite`, `#expect`), not XCTest.
@@ -76,9 +76,9 @@ Core or Presentation behind a protocol, implement it in an adapter, and wire it 
   UI behaviour. The snapshot below only shows layout; it asserts nothing.
 
 ## Looking at the UI
-1. **Previews.** Open `App/AudibleExporter.xcodeproj`; every view file ends with `#Preview`s,
+1. **Previews.** Open `App/Loudible.xcodeproj`; every view file ends with `#Preview`s,
    one per state. Each is one line, `PreviewCatalog.view(.someState)`: the states, their sizes
-   and their sample data live in `Sources/AudibleExporterApp/PreviewData.swift` (`#if DEBUG`,
+   and their sample data live in `Sources/LoudibleApp/PreviewData.swift` (`#if DEBUG`,
    synthetic data, in-memory fakes, logins on `.invalid` hosts, so nothing contacts Amazon). To
    add a state, add a `PreviewState` case, its size and view in `PreviewCatalog`, and a
    `#Preview` line in the view's file. Whole-window states use `AppViewModel.preview(…)`.
@@ -98,7 +98,7 @@ Core or Presentation behind a protocol, implement it in an adapter, and wire it 
 
 Snapshots show that each state renders; they assert nothing.
 
-`TestSupport` depends on `AudibleExporterApp` (via `@testable import`) for this, so every test
+`TestSupport` depends on `LoudibleApp` (via `@testable import`) for this, so every test
 binary links the app. Keep the `@Test` in one test target: `TestSupport` is linked into all three,
 so a test declared there runs three times.
 
@@ -111,16 +111,16 @@ SHA-256), and update the `61.*` libavformat check in `env.sh` and the dylib name
 `verify-app.sh` if the major versions change.
 
 ## Runtime state (for manual testing)
-- Credentials: one Keychain item, `AudibleExporter.AudibleSession`.
+- Credentials: one Keychain item, `Loudible.AudibleSession`.
 - Export folder: `UserDefaults` key `ExportDestinationPath`.
-- Kept downloads: `~/Documents/AudibleExporter/` (`CompositionRoot.downloadsFolder`), named
+- Kept downloads: `~/Documents/Loudible/` (`CompositionRoot.downloadsFolder`), named
   `Title [ASIN].aaxc`/`.aax`. A book is "downloaded" when a non-hidden audio file there carries
   `[ASIN]`; written as hidden `.….partial` files first, which are swept at launch.
 - Download manifests (keys, chapters, metadata) and covers:
   `~/Library/Application Support/<bundle id>/Downloads/<ASIN>.json|.cover`, mode 0600. A manifest
   without its audio file is deleted on the next rescan.
 - The old `~/Library/Caches/<bundle id>/Downloads` folder is no longer used and is removed at launch.
-- Bundle id `local.audibleexporter.AudibleExporter` (set in the Xcode project).
+- Bundle id `local.loudible.Loudible` (set in the Xcode project).
 
 ## Housekeeping
 - `todo/` holds the user's working notes and feature wishes; read them for intent, don't edit

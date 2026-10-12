@@ -1,7 +1,7 @@
 import Foundation
 import Testing
-@testable import AudibleExporterAdapters
-import AudibleExporterCore
+@testable import LoudibleAdapters
+import LoudibleCore
 import TestSupport
 
 @Suite struct LibraryAdapterTests {

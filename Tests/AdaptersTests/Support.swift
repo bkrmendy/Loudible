@@ -1,7 +1,7 @@
 import Foundation
 import Security
-@testable import AudibleExporterAdapters
-import AudibleExporterCore
+@testable import LoudibleAdapters
+import LoudibleCore
 import TestSupport
 
 /// Canned HTTP responses. Requests that no handler claims fail the test via `Unhandled`.

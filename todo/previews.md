@@ -3,7 +3,7 @@
 ## Context
 The goal is to look at any UI state without clicking through the running app. Today two things block that:
 1. **Toolchain.** `xcode-select` points at the Command Line Tools, which ship no `PreviewsMacros` plugin (the same reason the code avoids `@State`). `#Preview` would break `swift build` and `Scripts/test.sh`. The user asked for a proper Xcode project. Xcode 27.0 (Swift 6.4, the same compiler as the CLT) is installed at `/Applications/Xcode.app`, and its `MacOSX.platform/.../host/plugins` contains `libPreviewsMacros.dylib`.
-2. **Views are bound to live view models.** Every view in `Sources/AudibleExporterApp/ContentView.swift` (580 lines) reads `AppViewModel`/`SessionViewModel`/`LibraryViewModel`/`ExportViewModel` directly. Those models' state is `private(set)` and comes from Core actors, so most states (export at 40%, a failed job, an expired session) can't be built in a preview.
+2. **Views are bound to live view models.** Every view in `Sources/LoudibleApp/ContentView.swift` (580 lines) reads `AppViewModel`/`SessionViewModel`/`LibraryViewModel`/`ExportViewModel` directly. Those models' state is `private(set)` and comes from Core actors, so most states (export at 40%, a failed job, an expired session) can't be built in a preview.
 
 The outcome: an Xcode project you open and run with ⌘R. Views are split into pure "content" views that take values and closures, and each file ends with `#Preview`s covering every state. CLI scripts, tests and packaging keep working.
 
@@ -12,11 +12,11 @@ The outcome: an Xcode project you open and run with ⌘R. Views are split into p
 **Package stays the source of truth.** All modules remain SwiftPM targets. The Xcode project is a thin app shell that depends on the local package.
 
 1. **`Package.swift`**
-   - Turn `AudibleExporterApp` from an `executableTarget` into a library `.target`. Keep the name, so `TestSupport`'s `@testable import AudibleExporterApp` and the snapshot harness keep working. It still holds the views, `CompositionRoot` and the `--self-test` launcher logic.
+   - Turn `LoudibleApp` from an `executableTarget` into a library `.target`. Keep the name, so `TestSupport`'s `@testable import LoudibleApp` and the snapshot harness keep working. It still holds the views, `CompositionRoot` and the `--self-test` launcher logic.
    - Make the `App` struct, `Launcher.main()` and the types the shell needs `public`.
-   - Add a tiny `executableTarget` `AudibleExporter` (`Sources/AudibleExporter/main.swift` → `Launcher.main()`). This keeps `swift run AudibleExporter` and `.vscode/launch.json` working.
+   - Add a tiny `executableTarget` `Loudible` (`Sources/Loudible/main.swift` → `Launcher.main()`). This keeps `swift run Loudible` and `.vscode/launch.json` working.
    - Move the `-platform_version` linker hack onto this executable. Xcode builds against the real SDK and doesn't need it.
-   - Add a `library` product `AudibleExporterApp` for the Xcode project to consume.
+   - Add a `library` product `LoudibleApp` for the Xcode project to consume.
 2. **Remove the pkg-config dependency so Xcode can find FFmpeg.** Xcode launched from the Dock never sees `PKG_CONFIG_PATH`.
    - `build-ffmpeg.sh` creates a stable symlink `Vendor/ffmpeg → ffmpeg-$FFMPEG_VERSION`.
    - `Package.swift` derives `Vendor/ffmpeg` from `#filePath`. It passes `-I …/include` to `FFmpegBridge` (`cSettings` unsafeFlags) and `-L …/lib` as linker settings.
@@ -24,20 +24,20 @@ The outcome: an Xcode project you open and run with ⌘R. Views are split into p
    - `env.sh` keeps its version check (`61.*`) but no longer needs `PKG_CONFIG_PATH`.
    - Unsafe flags are allowed because the package is local.
 3. **`Scripts/env.sh`** exports `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` when that path exists, with a clear error if it doesn't. Every script and raw `swift` command then uses the Xcode toolchain, so `#Preview`, `@State` and `@Previewable` compile everywhere. Keep the TestingMacros plugin-path workaround in `test.sh`, which still applies to Swift 6.4.
-4. **New `App/AudibleExporter.xcodeproj`** (committed, objectVersion 77 with file-system-synchronized groups, so adding files doesn't churn the pbxproj; no XcodeGen/Tuist)
-   - Local package reference `..` and an app target `AudibleExporter` with sources in `App/AudibleExporter/`:
-     - `AudibleExporterMain.swift`: `@main` calls `Launcher.main()`.
+4. **New `App/Loudible.xcodeproj`** (committed, objectVersion 77 with file-system-synchronized groups, so adding files doesn't churn the pbxproj; no XcodeGen/Tuist)
+   - Local package reference `..` and an app target `Loudible` with sources in `App/Loudible/`:
+     - `LoudibleMain.swift`: `@main` calls `Launcher.main()`.
      - `Assets.xcassets`
    - Build settings:
      - arm64 only; `MACOSX_DEPLOYMENT_TARGET 14.0`; Swift 6 language mode.
-     - Bundle id `local.audibleexporter.AudibleExporter`, version 0.1.0.
+     - Bundle id `local.loudible.Loudible`, version 0.1.0.
      - Ad-hoc signing (`CODE_SIGN_IDENTITY=-`); App Sandbox off, as today.
      - `LD_RUNPATH_SEARCH_PATHS=@executable_path/../Frameworks`.
      - Generated Info.plist with the keys `build-app.sh` writes today (`LSArchitecturePriority`, `NSPrincipalClass`, display name, `LSMinimumSystemVersion` via the deployment target).
-   - A shared scheme `AudibleExporter`.
+   - A shared scheme `Loudible`.
    - `.gitignore`: stop ignoring `*.xcodeproj/` (keep `xcuserdata/`, `DerivedData/`).
 5. **`Scripts/build-app.sh`**
-   - Replace `swift build` + hand-written Info.plist with `xcodebuild -project App/AudibleExporter.xcodeproj -scheme AudibleExporter -configuration Release -derivedDataPath .build/xcode build`, then copy the `.app` to `build/`.
+   - Replace `swift build` + hand-written Info.plist with `xcodebuild -project App/Loudible.xcodeproj -scheme Loudible -configuration Release -derivedDataPath .build/xcode build`, then copy the `.app` to `build/`.
    - Keep the existing `bundle_dylibs.py` → `write-notices.py` → codesign steps. `verify-app.sh` stays unchanged and must pass.
    - `CONFIGURATION=debug` maps to `Debug`.
 
@@ -47,7 +47,7 @@ The outcome: an Xcode project you open and run with ⌘R. Views are split into p
 - **Content view (pure).** Takes plain values, `Binding`s for editable fields, and action closures. Previews use these.
 - **Wrapper (thin).** Maps the view model onto the content view and turns actions into `Task { await model… }`. No logic beyond that mapping.
 
-No Presentation or Core changes are needed: every value a content view needs is already a public derived property (`canSignIn`, `statusText`, `canCancel(_:)`, …). Replace `PopoverPresentation` (`ObservableObject`/`@StateObject`) with `@State` and delete the "@State is a macro" comments, here and in `AudibleExporterApp.swift`.
+No Presentation or Core changes are needed: every value a content view needs is already a public derived property (`canSignIn`, `statusText`, `canCancel(_:)`, …). Replace `PopoverPresentation` (`ObservableObject`/`@StateObject`) with `@State` and delete the "@State is a macro" comments, here and in `LoudibleApp.swift`.
 
 **Split `ContentView.swift` by area**, each file ending in its previews. Types stay `private`/`fileprivate` where possible and become `internal` only where another file needs them.
 
@@ -59,7 +59,7 @@ No Presentation or Core changes are needed: every value a content view needs is 
 | `LoginSheet.swift` | `LoginSheet` gets the browser as a view slot. Previews pass a placeholder rectangle, so **no preview loads amazon.com**. States: idle, registering overlay, error message, pasted URL entered (Submit enabled). |
 | `ContentView.swift` | `ContentView`, toolbar assembly, the `View` helper extensions (`bar`, `exportButtonBackground`, `removingToolbarTitle`, `loginSheet`). Whole-window previews at 1100×600: signed out, library loaded, loading, library load failed. |
 
-**Preview data**: new `Sources/AudibleExporterApp/PreviewData.swift`, wrapped in `#if DEBUG`.
+**Preview data**: new `Sources/LoudibleApp/PreviewData.swift`, wrapped in `#if DEBUG`.
 - Sample `Audiobook`s: varied titles, authors and runtimes; some without covers. Covers are a few coloured PNGs written once to a temp directory, as `Snapshot.swift` does today. `AsyncImage` needs a URL.
 - `ExportJob` samples built with the public `transition(to:)`.
 - Sample sessions and a `PendingLogin` with `.invalid` URLs.
@@ -90,17 +90,17 @@ No Presentation or Core changes are needed: every value a content view needs is 
 ## Docs
 - `AGENTS.md`:
   - Toolchain: Xcode 27 required; `env.sh` sets `DEVELOPER_DIR`.
-  - Commands: open `App/AudibleExporter.xcodeproj`.
+  - Commands: open `App/Loudible.xcodeproj`.
   - Replace the "Looking at the UI" section with previews first, snapshot second.
-  - Layering table: `AudibleExporterApp` is now a library plus two thin shells.
+  - Layering table: `LoudibleApp` is now a library plus two thin shells.
   - Note that `@State` is fine.
 - `README.md`: dev setup lines.
 - Leave `todo/` alone. Commit the user's pending `ContentView.swift` change first, or carry it over into `ExportViews.swift`. Either way, keep the reveal-in-Finder button.
 
 ## Verification
 1. `Scripts/test.sh`: layering check plus all tests pass under the Xcode toolchain, with `#Preview`s compiled in.
-2. `source Scripts/env.sh && swift build`, then `swift run AudibleExporter`: the app launches.
-3. `xcodebuild -project App/AudibleExporter.xcodeproj -scheme AudibleExporter build` succeeds, including from a shell without `env.sh` sourced. This proves FFmpeg is found without pkg-config.
+2. `source Scripts/env.sh && swift build`, then `swift run Loudible`: the app launches.
+3. `xcodebuild -project App/Loudible.xcodeproj -scheme Loudible build` succeeds, including from a shell without `env.sh` sourced. This proves FFmpeg is found without pkg-config.
 4. `Scripts/build-app.sh && Scripts/verify-app.sh`: all packaging checks pass (arm64, minos 14, bundled dylibs only, LGPL, self-test).
 5. `SNAPSHOT_PATH=<scratch dir> Scripts/test.sh --filter Snapshot` writes one PNG per `PreviewState`. Look through them: this checks that every state renders, without Xcode.
 6. Manual (the user, in Xcode): open the project, run with ⌘R, and check that the canvas shows the previews. Step 5 covers whether each state renders; it does not cover the canvas itself.

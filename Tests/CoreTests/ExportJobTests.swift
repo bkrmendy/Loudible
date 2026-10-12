@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import AudibleExporterCore
+import LoudibleCore
 import TestSupport
 
 @Suite struct ExportJobTests {

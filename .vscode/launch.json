@@ -5,20 +5,20 @@
             "request": "launch",
             "args": [],
             "cwd": "${workspaceFolder:NativeMac}",
-            "name": "Debug AudibleExporter",
-            "target": "AudibleExporter",
+            "name": "Debug Loudible",
+            "target": "Loudible",
             "configuration": "debug",
-            "preLaunchTask": "swift: Build Debug AudibleExporter"
+            "preLaunchTask": "swift: Build Debug Loudible"
         },
         {
             "type": "swift",
             "request": "launch",
             "args": [],
             "cwd": "${workspaceFolder:NativeMac}",
-            "name": "Release AudibleExporter",
-            "target": "AudibleExporter",
+            "name": "Release Loudible",
+            "target": "Loudible",
             "configuration": "release",
-            "preLaunchTask": "swift: Build Release AudibleExporter"
+            "preLaunchTask": "swift: Build Release Loudible"
         }
     ]
 }

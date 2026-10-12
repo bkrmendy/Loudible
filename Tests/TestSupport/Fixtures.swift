@@ -1,5 +1,5 @@
 import Foundation
-import AudibleExporterCore
+import LoudibleCore
 
 /// Deterministic, synthetic test data. Nothing here belongs to a real account.
 public enum Fixtures {
@@ -89,7 +89,7 @@ public struct TemporaryDirectory: Sendable {
 
     public init(_ label: String = "test") throws {
         url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("AudibleExporterTests", isDirectory: true)
+            .appendingPathComponent("LoudibleTests", isDirectory: true)
             .appendingPathComponent("\(label)-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     }

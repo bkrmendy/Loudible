@@ -19,7 +19,7 @@ os.makedirs(licenses, exist_ok=True)
 for name in ("COPYING.LGPLv2.1", "LICENSE.md"):
     shutil.copy(os.path.join(prefix, "share", "licenses", name), os.path.join(licenses, name))
 
-notices = f"""AudibleExporter third-party notices
+notices = f"""Loudible third-party notices
 
 FFmpeg {info['version']}
 This software uses libraries from the FFmpeg project (https://ffmpeg.org) under the
@@ -32,7 +32,7 @@ License text: Licenses/FFmpeg/COPYING.LGPLv2.1 (see also Licenses/FFmpeg/LICENSE
 Source code: the exact source used is the official release tarball
   {info['url']}
   SHA-256 {info['sha256']}
-It is also published alongside each AudibleExporter release, together with the build
+It is also published alongside each Loudible release, together with the build
 script (Scripts/build-ffmpeg.sh). FFmpeg was configured with:
   {info['configure']}
 

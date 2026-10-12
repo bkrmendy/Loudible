@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds the minimal, LGPL-licensed FFmpeg that AudibleExporter links and bundles:
+# Builds the minimal, LGPL-licensed FFmpeg that Loudible links and bundles:
 # arm64 shared libraries (libavformat, libavcodec, libavutil) with only the components
 # needed to decrypt AAX/AAXC and remux into M4B. Installs into Vendor/ffmpeg-<version>, with a
 # Vendor/ffmpeg symlink to it that Package.swift uses.

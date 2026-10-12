@@ -23,7 +23,7 @@ each other store; an empty first page means nothing is there. No separate count 
 
 ## Design
 
-### Core (`Sources/AudibleExporterCore`)
+### Core (`Sources/LoudibleCore`)
 - `Audiobook.swift`: add `public let marketplace: Marketplace` (the store that holds the title).
   Required init parameter, placed after `asin`.
 - `Dependencies.swift` (`AudibleAPI`): make the store explicit, separate from the session's home
@@ -47,7 +47,7 @@ each other store; an empty first page means nothing is there. No separate count 
 - `ExportQueue.swift` (`exportOnce`): `api.license(for: book.asin, marketplace: book.marketplace, session:)`.
   Keep `withValidSession` here: the library load already proved that store accepts the tokens.
 
-### Adapters (`Sources/AudibleExporterAdapters`)
+### Adapters (`Sources/LoudibleAdapters`)
 - `AudibleHTTPAPI.swift`: pass the explicit marketplace to `LibraryRequest.request` and
   `LicenseRequest.request` instead of `session.marketplace`. Signing unchanged.
 - `LibraryResponse.swift`: `LibraryParser.page(from:response:marketplace:)` / `entry(_:marketplace:)`
@@ -55,7 +55,7 @@ each other store; an empty first page means nothing is there. No separate count 
 - Voucher key derivation (`LicenseResponse.swift`) uses device type/serial/customer ID/ASIN only - no
   change needed.
 
-### Presentation (`Sources/AudibleExporterPresentation/LibraryViewModel.swift`)
+### Presentation (`Sources/LoudiblePresentation/LibraryViewModel.swift`)
 `refresh()` becomes two phases so the home library appears without waiting for nine more requests:
 1. Load home (`session` marketplace, passed in by `AppViewModel` or read from the service): set `books`,
    `loadState = .loaded`. Home failure behaves as today (`.failed`, previous rows kept).
@@ -68,7 +68,7 @@ each other store; an empty first page means nothing is there. No separate count 
 - `summary`: e.g. "120 books · also in UK, Japan"; a non-error notice for unchecked stores
   ("Couldn't check Japan, India") separate from `errorMessage` so it isn't shown as a red failure.
 
-### App (`Sources/AudibleExporterApp/ContentView.swift`)
+### App (`Sources/LoudibleApp/ContentView.swift`)
 - `BookTile`: small marketplace badge (e.g. "UK") when `book.marketplace != home`.
 - Grid overlay / toolbar: "Checking other marketplaces…" while phase 2 runs.
 - `AccountPopover`: list "Also has titles in: United Kingdom (12), Japan (3)".

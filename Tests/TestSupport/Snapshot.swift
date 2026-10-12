@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 import SwiftUI
-@testable import AudibleExporterApp
+@testable import LoudibleApp
 
 /// Renders every `PreviewState` (the states the `#Preview`s show) into one PNG each.
 ///
@@ -49,7 +49,7 @@ public enum Snapshot {
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: style, backing: .buffered, defer: false)
         // Closing must not release the window a second time; Swift owns it.
         window.isReleasedWhenClosed = false
-        window.title = "AudibleExporter"
+        window.title = "Loudible"
         window.contentView = NSHostingView(rootView: PreviewCatalog.view(state))
         defer { window.close() }
 

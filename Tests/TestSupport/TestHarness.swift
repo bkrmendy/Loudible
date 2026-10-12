@@ -3,7 +3,7 @@ import Foundation
 public enum TestHarness {
     /// Set by `Scripts/test.sh`, which runs the tests in a sandbox that denies non-loopback network access.
     public static var isSandboxed: Bool {
-        ProcessInfo.processInfo.environment["AUDIBLE_EXPORTER_TEST_SANDBOX"] == "1"
+        ProcessInfo.processInfo.environment["LOUDIBLE_TEST_SANDBOX"] == "1"
     }
 
     /// Attempts a blocking TCP connect and returns 0 on success or the resulting errno.

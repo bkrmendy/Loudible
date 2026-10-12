@@ -1,0 +1,3 @@
+import LoudibleApp
+
+Launcher.main()

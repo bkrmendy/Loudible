@@ -1,4 +1,4 @@
-# The FFmpeg release AudibleExporter builds and bundles. Sourced by the other scripts.
+# The FFmpeg release Loudible builds and bundles. Sourced by the other scripts.
 #
 # To upgrade: change the version, download ffmpeg-$V.tar.xz and .asc from https://ffmpeg.org/releases/,
 # verify the signature against FFmpeg's release key (fingerprint FCF9 86EA 15E6 E293 A564

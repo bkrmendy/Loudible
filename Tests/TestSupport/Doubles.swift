@@ -1,5 +1,5 @@
 import Foundation
-import AudibleExporterCore
+import LoudibleCore
 
 /// A lock-protected value for test doubles shared across tasks.
 public final class Locked<Value>: @unchecked Sendable {

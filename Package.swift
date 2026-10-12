@@ -7,25 +7,25 @@ import PackageDescription
 let ffmpeg = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Vendor/ffmpeg").path
 
 let package = Package(
-    name: "AudibleExporter",
+    name: "Loudible",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "AudibleExporter", targets: ["AudibleExporter"]),
-        // Consumed by the app target of App/AudibleExporter.xcodeproj.
-        .library(name: "AudibleExporterApp", targets: ["AudibleExporterApp"]),
+        .executable(name: "Loudible", targets: ["Loudible"]),
+        // Consumed by the app target of App/Loudible.xcodeproj.
+        .library(name: "LoudibleApp", targets: ["LoudibleApp"]),
     ],
     targets: [
         // Business rules only: Foundation, no UI frameworks, no network/crypto/Keychain code.
-        .target(name: "AudibleExporterCore"),
+        .target(name: "LoudibleCore"),
         // Audible HTTP API, Keychain, and file downloads.
         .target(
-            name: "AudibleExporterAdapters",
-            dependencies: ["AudibleExporterCore"]
+            name: "LoudibleAdapters",
+            dependencies: ["LoudibleCore"]
         ),
         // Testable view models. Foundation + Observation only.
         .target(
-            name: "AudibleExporterPresentation",
-            dependencies: ["AudibleExporterCore"]
+            name: "LoudiblePresentation",
+            dependencies: ["LoudibleCore"]
         ),
         // In-process decryption and remuxing with FFmpeg, built by Scripts/build-ffmpeg.sh into
         // Vendor/ffmpeg. Unsafe flags are fine: the package is only ever used locally.
@@ -40,27 +40,27 @@ let package = Package(
             ]
         ),
         .target(
-            name: "AudibleExporterFFmpeg",
+            name: "LoudibleFFmpeg",
             dependencies: [
-                "AudibleExporterCore",
+                "LoudibleCore",
                 "FFmpegBridge",
             ]
         ),
         // Views, the composition root, and the launcher. A library so that the `swift run` shell
         // below, the Xcode project's app target, and the snapshot tests can all use it.
         .target(
-            name: "AudibleExporterApp",
+            name: "LoudibleApp",
             dependencies: [
-                "AudibleExporterCore",
-                "AudibleExporterAdapters",
-                "AudibleExporterPresentation",
-                "AudibleExporterFFmpeg",
+                "LoudibleCore",
+                "LoudibleAdapters",
+                "LoudiblePresentation",
+                "LoudibleFFmpeg",
             ]
         ),
-        // `swift run AudibleExporter`. The Xcode project has its own shell around the same launcher.
+        // `swift run Loudible`. The Xcode project has its own shell around the same launcher.
         .executableTarget(
-            name: "AudibleExporter",
-            dependencies: ["AudibleExporterApp"],
+            name: "Loudible",
+            dependencies: ["LoudibleApp"],
             // SwiftPM's default build system (swiftbuild) stamps the executable with the
             // deployment target as its SDK version (LC_BUILD_VERSION sdk 14.0). macOS then runs
             // the app in compatibility mode with the pre-macOS 26 design: an opaque title bar and
@@ -71,21 +71,21 @@ let package = Package(
 
         .target(
             name: "TestSupport",
-            dependencies: ["AudibleExporterCore", "AudibleExporterPresentation", "AudibleExporterApp"],
+            dependencies: ["LoudibleCore", "LoudiblePresentation", "LoudibleApp"],
             path: "Tests/TestSupport"
         ),
         .testTarget(
             name: "CoreTests",
-            dependencies: ["AudibleExporterCore", "TestSupport"]
+            dependencies: ["LoudibleCore", "TestSupport"]
         ),
         .testTarget(
             name: "AdaptersTests",
-            dependencies: ["AudibleExporterAdapters", "AudibleExporterCore", "TestSupport"],
+            dependencies: ["LoudibleAdapters", "LoudibleCore", "TestSupport"],
             resources: [.copy("Fixtures")]
         ),
         .testTarget(
             name: "PresentationTests",
-            dependencies: ["AudibleExporterPresentation", "AudibleExporterCore", "TestSupport"]
+            dependencies: ["LoudiblePresentation", "LoudibleCore", "TestSupport"]
         ),
     ]
 )

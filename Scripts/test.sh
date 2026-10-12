@@ -47,5 +47,5 @@ SANDBOX_PROFILE='(version 1)
 (allow network-outbound (remote ip "localhost:*"))
 (allow network-outbound (remote unix-socket))'
 
-AUDIBLE_EXPORTER_TEST_SANDBOX=1 with_timeout \
+LOUDIBLE_TEST_SANDBOX=1 with_timeout \
     sandbox-exec -p "$SANDBOX_PROFILE" swift test --skip-build --disable-sandbox "$@"

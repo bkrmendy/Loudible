@@ -1,6 +1,6 @@
 #!/bin/bash
-# Builds a self-contained, ad-hoc signed build/AudibleExporter.app for Apple Silicon from
-# App/AudibleExporter.xcodeproj (derived data in .build/xcode).
+# Builds a self-contained, ad-hoc signed build/Loudible.app for Apple Silicon from
+# App/Loudible.xcodeproj (derived data in .build/xcode).
 #
 #   Scripts/build-app.sh            # release build
 #   CONFIGURATION=debug Scripts/build-app.sh
@@ -20,7 +20,7 @@ case "$CONFIGURATION" in
     debug) XCODE_CONFIGURATION=Debug ;;
     *) echo "error: CONFIGURATION must be release or debug" >&2; exit 1 ;;
 esac
-APP_NAME="AudibleExporter"
+APP_NAME="Loudible"
 APP="build/$APP_NAME.app"
 DERIVED_DATA=".build/xcode"
 
@@ -35,7 +35,7 @@ if [ -n "${APP_VERSION:-}" ]; then
     VERSION_SETTINGS=(MARKETING_VERSION="${APP_VERSION%%-*}" CURRENT_PROJECT_VERSION="${APP_VERSION%%-*}")
 fi
 xcodebuild -quiet \
-    -project App/AudibleExporter.xcodeproj -scheme "$APP_NAME" \
+    -project App/Loudible.xcodeproj -scheme "$APP_NAME" \
     -configuration "$XCODE_CONFIGURATION" -destination 'platform=macOS,arch=arm64' \
     -derivedDataPath "$DERIVED_DATA" build ${VERSION_SETTINGS[@]+"${VERSION_SETTINGS[@]}"}
 
@@ -44,7 +44,7 @@ mkdir -p build
 ditto "$DERIVED_DATA/Build/Products/$XCODE_CONFIGURATION/$APP_NAME.app" "$APP"
 mkdir -p "$APP/Contents/Frameworks" "$APP/Contents/Resources/Licenses"
 
-# Debug builds put the code in AudibleExporter.debug.dylib next to a small launcher.
+# Debug builds put the code in Loudible.debug.dylib next to a small launcher.
 BINARY="$APP/Contents/MacOS/$APP_NAME"
 if [ -f "$BINARY.debug.dylib" ]; then BINARY="$BINARY.debug.dylib"; fi
 
