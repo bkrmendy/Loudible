@@ -85,7 +85,13 @@ public enum ExportFileNaming {
         return ".\(truncated(base, toUTF8Bytes: maximumFileNameBytes - fixed)).\(token).partial"
     }
 
-    /// Whether `name` is one of the names `partialName(base:token:)` produces.
+    /// Hidden name for a download kept to be continued: `.<ASIN>.download.partial`. It depends on
+    /// the ASIN only, so a later attempt finds it even if the title changed meanwhile.
+    public static func resumablePartialName(asin: String) -> String {
+        ".\(asin.filter { $0.isASCII && ($0.isLetter || $0.isNumber) }).download.partial"
+    }
+
+    /// Whether `name` is one of the names `partialName(base:token:)` or `resumablePartialName(asin:)` produces.
     public static func isPartial(_ name: String) -> Bool {
         name.hasPrefix(".") && name.hasSuffix(".partial")
     }

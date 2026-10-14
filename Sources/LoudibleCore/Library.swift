@@ -30,6 +30,14 @@ public enum LibraryRules {
         return nil
     }
 
+    /// Title fragments whose books are never shown, matched case- and diacritic-insensitively.
+    public static let hiddenTitleFragments = ["Morning"]
+
+    /// Whether the book is left out of the library, remote or downloaded.
+    public static func isHidden(_ book: Audiobook) -> Bool {
+        hiddenTitleFragments.contains { book.title.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+    }
+
     /// `existing` followed by the books of `new` whose ASIN it does not have yet, so the home
     /// store's copy of a title wins over another store's.
     public static func merge(_ existing: [Audiobook], _ new: [Audiobook]) -> [Audiobook] {

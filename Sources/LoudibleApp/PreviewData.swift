@@ -17,7 +17,7 @@ enum PreviewState: String, CaseIterable, Sendable {
     case signInPanel, signInPanelExpired
     // LibraryViews.swift
     case tileUnselected, tileSelected, tileNoCover, tileLongTitle, tileNoRuntime, tileDisabled, tileNotInLibrary, tileOtherMarketplace
-    case tileQueued, tileDownloading, tileExporting, tileFailed, tileDownloaded, tileExported
+    case tileQueued, tileDownloading, tileExporting, tileFailed, tileFailedPartial, tilePaused, tileDownloaded, tileExported
     case gridSignedOut, gridLoading, gridCheckingMarketplaces, gridEmpty, gridBooks, gridSelection, gridNoSearchResults
     case messagesNone, messagesOne, messagesSeveral, messagesNotice
     // LoginSheet.swift
@@ -41,7 +41,7 @@ enum PreviewCatalog {
             CGSize(width: 280, height: 240)
         case .signInPanel, .signInPanelExpired: CGSize(width: 400, height: 260)
         case .tileUnselected, .tileSelected, .tileNoCover, .tileLongTitle, .tileNoRuntime, .tileDisabled, .tileNotInLibrary, .tileOtherMarketplace,
-             .tileQueued, .tileDownloading, .tileExporting, .tileFailed, .tileDownloaded, .tileExported:
+             .tileQueued, .tileDownloading, .tileExporting, .tileFailed, .tileFailedPartial, .tilePaused, .tileDownloaded, .tileExported:
             CGSize(width: 200, height: 280)
         case .gridSignedOut, .gridLoading, .gridCheckingMarketplaces, .gridEmpty, .gridBooks, .gridSelection, .gridNoSearchResults:
             CGSize(width: 900, height: 560)
@@ -96,6 +96,9 @@ enum PreviewCatalog {
         case .tileDownloading: return tile(books[1], PreviewData.tileState(status: .running(.download, progress: 0.4, transferred: TransferProgress(bytesReceived: 132_000_000, bytesExpected: 288_000_000))))
         case .tileExporting: return tile(books[1], PreviewData.tileState(status: .running(.export, progress: 0.7)))
         case .tileFailed: return tile(books[1], PreviewData.tileState(status: .failed(.download, "HTTP 403: Forbidden")))
+        case .tileFailedPartial:
+            return tile(books[1], PreviewData.tileState(status: .failed(.download, "The network connection was lost.", kept: PreviewData.kept)))
+        case .tilePaused: return tile(books[1], PreviewData.tileState(status: .paused(PreviewData.kept)))
         case .tileDownloaded: return tile(books[1], PreviewData.tileState(status: .downloaded))
         case .tileExported: return tile(books[1], PreviewData.tileState(status: .exported))
 
@@ -279,11 +282,15 @@ enum PreviewData {
 
     // MARK: Tiles
 
+    /// Part of an unfinished download kept for later.
+    static let kept = TransferProgress(bytesReceived: 132_000_000, bytesExpected: 288_000_000)
+
     /// A tile with the menu that goes with its status.
     static func tileState(isInLibrary: Bool = true, status: BookStatus) -> BookTileState {
         let items: [BookMenuItem] = switch status {
         case .queued(let kind), .running(let kind, _, _): [BookMenuItem(.cancel(jobID: UUID(), kind: kind))]
         case .downloaded, .exported: [BookMenuItem(.export), BookMenuItem(.showDownload), BookMenuItem(.deleteDownload)]
+        case .failed(_, _, _?), .paused: [BookMenuItem(.resumeDownload), BookMenuItem(.export), BookMenuItem(.deleteDownload)]
         case .none, .failed: [BookMenuItem(.download)]
         }
         return BookTileState(isInLibrary: isInLibrary, status: status, menuItems: items)
@@ -392,7 +399,11 @@ private struct PreviewCredentialStore: CredentialStore {
 }
 
 private struct PreviewDownloader: FileDownloader {
-    func download(from url: URL, to destination: URL, progress: @escaping @Sendable (TransferProgress) -> Void) async throws {
+    func download(
+        from url: URL, to destination: URL, resume: ResumePoint?,
+        checkpoint: @escaping @Sendable (DownloadCheckpoint) -> Void,
+        progress: @escaping @Sendable (TransferProgress) -> Void
+    ) async throws {
         throw ExporterError.download("Previews cannot download.")
     }
 }

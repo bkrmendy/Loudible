@@ -73,14 +73,7 @@ private struct AccountPopover: View {
             },
             signOut: {
                 dismiss()
-                if model.hasActiveJobs {
-                    // Let the popover close before the modal alert takes over.
-                    DispatchQueue.main.async {
-                        if confirmSignOutWithActiveJobs() { Task { await model.signOut() } }
-                    }
-                } else {
-                    Task { await model.signOut() }
-                }
+                Task { await model.signOut() }
             }
         )
     }
@@ -222,17 +215,6 @@ private extension View {
             buttonStyle(.borderedProminent)
         }
     }
-}
-
-/// Signing out cancels every queued and running job; finished files are kept.
-@MainActor
-private func confirmSignOutWithActiveJobs() -> Bool {
-    let alert = NSAlert()
-    alert.messageText = "Sign out and cancel the jobs in progress?"
-    alert.informativeText = "Unfinished downloads and exports are discarded. Finished files are kept."
-    alert.addButton(withTitle: "Sign Out")
-    alert.addButton(withTitle: "Cancel")
-    return alert.runModal() == .alertFirstButtonReturn
 }
 
 /// A circle with the account's initial, or a person symbol when there is no name.

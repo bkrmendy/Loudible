@@ -282,13 +282,16 @@ import TestSupport
         #expect(app.menuItems(for: app.library.books[0]).map(\.action) == [.download, .export, .showExport])
     }
 
-    @Test func signOutCancelsJobsAndKeepsFinishedFiles() async throws {
+    @Test func signOutPausesDownloadsAndSigningInAgainContinuesThem() async throws {
         defer { work.cleanUp() }
         downloader.handler.withLock {
             $0 = { source, destination in
-                // B2 only ends by being cancelled.
-                if source.lastPathComponent.hasPrefix("B2") { try await Task.sleep(for: .seconds(60)) }
-                try Data().write(to: destination)
+                // B2 only ends by being stopped, with part of it on disk.
+                if source.lastPathComponent.hasPrefix("B2") {
+                    try Data("enc".utf8).write(to: destination)
+                    try await Task.sleep(for: .seconds(60))
+                }
+                try Data("encrypted".utf8).write(to: destination)
             }
         }
         let (app, queue) = try await makeApp()
@@ -300,6 +303,117 @@ import TestSupport
         #expect(!app.hasActiveJobs)
         #expect(!app.session.isSignedIn)
         #expect(downloads.scanDownloads().keys.sorted() == ["B1"])
+        #expect(app.partialDownloads == ["B2": TransferProgress(bytesReceived: 3, bytesExpected: downloader.expectedLength)])
         try await waitUntil { await app.library.books.isEmpty }
+
+        downloader.handler.withLock { $0 = { _, destination in try Data("encrypted".utf8).write(to: destination) } }
+        api.registerHandler.withLock { $0 = { _, _ in Fixtures.session() } }
+        await app.session.signIn()
+        await app.session.completeSignIn(with: Fixtures.callbackURL())
+        try await waitUntil { downloads.scanDownloads().keys.sorted() == ["B1", "B2"] }
+        #expect(downloader.resumes.current.last! == ResumePoint(
+            committedLength: 3, expectedLength: downloader.expectedLength, validator: MockDownloader.validator
+        ))
+        try await waitUntil { await app.partialDownloads.isEmpty }
+    }
+
+    /// Bytes of an unfinished download as an earlier run left them.
+    func keepPartial(_ asin: String, customerID: String = Fixtures.session().customerID) throws {
+        try downloads.ensureFolder()
+        try Data("enc".utf8).write(to: downloads.partialFileURL(for: asin))
+        try downloads.writePartialDownload(PartialDownload(
+            book: Fixtures.book(asin), customerID: customerID, fileExtension: "aaxc",
+            checkpoint: DownloadCheckpoint(expectedLength: 9, validator: MockDownloader.validator, committedLength: 3),
+            updatedAt: Fixtures.referenceDate
+        ))
+    }
+
+    @Test func launchContinuesTheAccountsDownloadsAndDropsTheRest() async throws {
+        defer { work.cleanUp() }
+        try keepPartial("B1")
+        try keepPartial("B2", customerID: "amzn1.account.SOMEONE.ELSE")
+        try keepPartial("B9")  // no longer in the library
+        let (app, queue) = try await makeApp()
+        await queue.waitUntilFinished()
+        try await waitUntil { await app.downloadedFiles.keys.sorted() == ["B1"] }
+        #expect(downloader.resumes.current == [ResumePoint(committedLength: 3, expectedLength: 9, validator: MockDownloader.validator)])
+        #expect(downloads.partialDownloads().isEmpty)
+        #expect(app.partialDownloads.isEmpty)
+        #expect(app.status(for: app.library.books[1]) == .none)
+    }
+
+    @Test func signedOutLaunchKeepsTheBytesAndShowsThemPaused() async throws {
+        defer { work.cleanUp() }
+        store.stored.withLock { $0 = nil }
+        try keepPartial("B1")
+        let (app, _) = try await makeApp()
+        #expect(!app.session.isSignedIn)
+        #expect(downloader.downloads.current.isEmpty)
+        let kept = TransferProgress(bytesReceived: 3, bytesExpected: 9)
+        #expect(app.partialDownloads == ["B1": kept])
+        #expect(app.status(for: Fixtures.book("B1")) == .paused(kept))
+    }
+
+    @Test func failedLibraryLoadDeletesNothing() async throws {
+        defer { work.cleanUp() }
+        api.libraryHandler.withLock { $0 = { _, _, _, _ in throw ExporterError.network("offline") } }
+        try keepPartial("B9")
+        let (app, _) = try await makeApp()
+        #expect(app.library.errorMessage != nil)
+        #expect(downloads.partialDownload(for: "B9") != nil)
+        #expect(downloader.downloads.current.isEmpty)
+    }
+
+    @Test func failedDownloadKeepsItsBytesUntilResumedOrDiscarded() async throws {
+        defer { work.cleanUp() }
+        downloader.handler.withLock {
+            $0 = { _, destination in
+                try Data("enc".utf8).write(to: destination)
+                throw ExporterError.download("HTTP 500")
+            }
+        }
+        let (app, queue) = try await makeApp()
+        let book = app.library.books[0]
+        await app.export.download([book])
+        await queue.waitUntilFinished()
+        let kept = TransferProgress(bytesReceived: 3, bytesExpected: downloader.expectedLength)
+        try await waitUntil { await app.status(for: book) == .failed(.download, "Download failed: HTTP 500", kept: kept) }
+        #expect(app.menuItems(for: book).map(\.action) == [.resumeDownload, .export, .deleteDownload])
+        #expect(app.selectedBooks(offering: .download).isEmpty)
+        app.library.toggleSelection(book.asin)
+        #expect(app.selectedBooks(offering: .download) == [book])
+
+        // A refresh doesn't retry it by itself.
+        await app.refreshLibrary()
+        #expect(downloader.downloads.current.count == 1)
+
+        await app.deleteDownload(book)
+        #expect(app.status(for: book) == .failed(.download, "Download failed: HTTP 500"))
+        #expect(downloads.partialDownloads().isEmpty)
+        #expect(app.menuItems(for: book).map(\.action) == [.download, .export])
+    }
+
+    @Test func resumeDownloadContinuesTheKeptBytes() async throws {
+        defer { work.cleanUp() }
+        downloader.handler.withLock {
+            $0 = { _, destination in
+                try Data("enc".utf8).write(to: destination)
+                throw ExporterError.download("HTTP 500")
+            }
+        }
+        let (app, queue) = try await makeApp()
+        let book = app.library.books[0]
+        await app.perform(.download, on: book)
+        await queue.waitUntilFinished()
+        try await waitUntil { await app.partialDownloads[book.asin] != nil }
+
+        downloader.handler.withLock { $0 = { _, destination in try Data("encrypted".utf8).write(to: destination) } }
+        await app.perform(.resumeDownload, on: book)
+        await queue.waitUntilFinished()
+        try await waitUntil { await app.status(for: book) == .downloaded }
+        #expect(downloader.resumes.current.last! == ResumePoint(
+            committedLength: 3, expectedLength: downloader.expectedLength, validator: MockDownloader.validator
+        ))
+        #expect(app.partialDownloads.isEmpty)
     }
 }

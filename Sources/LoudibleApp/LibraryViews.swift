@@ -168,7 +168,7 @@ struct BookTile: View {
                             Text("Not in library").font(.caption2).foregroundStyle(.orange)
                         }
                         // Takes the runtime's place while downloading, so the tile keeps its height.
-                        if case .running(_, _, let transferred?) = state.status {
+                        if let transferred = state.status.transferred {
                             Text(transferred.text).font(.caption2).monospacedDigit().foregroundStyle(.secondary)
                         } else if let length = book.runtimeMinutes.map({ "\($0 / 60)h \($0 % 60)m" }) {
                             Text(length).font(.caption2).foregroundStyle(.tertiary)
@@ -280,6 +280,8 @@ private struct BookStatusBadge: View {
             nil
         case .queued:
             AnyView(icon("clock", .white))
+        case .paused:
+            AnyView(icon("pause.circle.fill", .white))
         case .running(let kind, let progress, _):
             AnyView(ProgressRing(progress: progress, color: kind == .export ? .accentColor : .white))
         case .downloaded:
@@ -332,10 +334,23 @@ extension NSImage {
     }()
 }
 
+extension BookStatus {
+    /// The download bytes to show instead of the runtime: received so far, or kept for later.
+    fileprivate var transferred: TransferProgress? {
+        switch self {
+        case .running(_, _, let transferred): transferred
+        case .failed(_, _, let kept): kept
+        case .paused(let kept): kept
+        case .none, .queued, .downloaded, .exported: nil
+        }
+    }
+}
+
 extension BookAction {
     fileprivate var title: String {
         switch self {
         case .download: "Download"
+        case .resumeDownload: "Resume Download"
         case .cancel(_, .download): "Cancel Download"
         case .cancel(_, .export): "Cancel Export"
         case .export: "Export to M4B"
@@ -359,6 +374,8 @@ extension BookAction {
 #Preview("Tile – downloading") { PreviewCatalog.view(.tileDownloading) }
 #Preview("Tile – exporting") { PreviewCatalog.view(.tileExporting) }
 #Preview("Tile – failed") { PreviewCatalog.view(.tileFailed) }
+#Preview("Tile – failed, part downloaded") { PreviewCatalog.view(.tileFailedPartial) }
+#Preview("Tile – download paused") { PreviewCatalog.view(.tilePaused) }
 #Preview("Tile – downloaded") { PreviewCatalog.view(.tileDownloaded) }
 #Preview("Tile – exported") { PreviewCatalog.view(.tileExported) }
 #Preview("Grid – signed out") { PreviewCatalog.view(.gridSignedOut) }

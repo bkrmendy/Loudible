@@ -132,19 +132,44 @@ public final class MockAudibleAPI: AudibleAPI, @unchecked Sendable {
     }
 }
 
-/// Writes `contents` to the destination unless the handler throws.
+/// Writes `contents` to the destination unless the handler throws. Records the resume point of
+/// each call, and reports a checkpoint (`expectedLength` bytes, `validator`) when the transfer
+/// starts and the file's size when the handler returns or throws, like the real downloader.
 public final class MockDownloader: FileDownloader, @unchecked Sendable {
+    public static let validator = DownloadValidator.etag("\"mock\"")
+
     public let handler: Locked<@Sendable (URL, URL) async throws -> Void>
     public let downloads = Locked<[(source: URL, destination: URL)]>([])
+    public let resumes = Locked<[ResumePoint?]>([])
+    public let expectedLength: Int64
 
     public init(contents: Data = Data("encrypted".utf8)) {
         handler = Locked { _, destination in try contents.write(to: destination) }
+        expectedLength = Int64(contents.count)
     }
 
-    public func download(from url: URL, to destination: URL, progress: @escaping @Sendable (TransferProgress) -> Void) async throws {
+    public func download(
+        from url: URL,
+        to destination: URL,
+        resume: ResumePoint?,
+        checkpoint: @escaping @Sendable (DownloadCheckpoint) -> Void,
+        progress: @escaping @Sendable (TransferProgress) -> Void
+    ) async throws {
         downloads.withLock { $0.append((url, destination)) }
+        resumes.withLock { $0.append(resume) }
+        func report() {
+            let size = (try? FileManager.default.attributesOfItem(atPath: destination.path))?[.size] as? Int64 ?? 0
+            checkpoint(DownloadCheckpoint(expectedLength: expectedLength, validator: Self.validator, committedLength: size))
+        }
+        report()
         progress(TransferProgress(bytesReceived: 50, bytesExpected: 100))
-        try await handler.current(url, destination)
+        do {
+            try await handler.current(url, destination)
+        } catch {
+            report()
+            throw error
+        }
+        report()
         progress(TransferProgress(bytesReceived: 100, bytesExpected: 100))
     }
 }

@@ -124,4 +124,60 @@ import TestSupport
         let left = try FileManager.default.contentsOfDirectory(atPath: downloads.folder.path).sorted()
         #expect(left == [".DS_Store", "Book [B1].partial", "Book [B2].aaxc"])
     }
+
+    func partial(_ asin: String, committed: Int64 = 1, expected: Int64 = 4) -> PartialDownload {
+        PartialDownload(
+            book: Fixtures.book(asin), customerID: "amzn1.account.SYNTHETIC", fileExtension: "aaxc",
+            checkpoint: DownloadCheckpoint(expectedLength: expected, validator: .etag("\"e\""), committedLength: committed),
+            updatedAt: Fixtures.referenceDate
+        )
+    }
+
+    @Test func sweepKeepsUnfinishedDownloadsWithTheirRecord() throws {
+        defer { root.cleanUp() }
+        try touch(".B1.download.partial")
+        try downloads.writePartialDownload(partial("B1"))
+        try touch(".B2.download.partial")  // no record
+        try downloads.writePartialDownload(partial("B3"))  // no file
+        try touch(".B4.1234.cover", in: downloads.manifestFolder)
+        try touch(".B4.json.5678.tmp", in: downloads.manifestFolder)
+        try downloads.writeManifest(manifest("B4"))
+
+        downloads.sweepPartials()
+
+        let left = try FileManager.default.contentsOfDirectory(atPath: downloads.folder.path).sorted()
+        #expect(left == [".B1.download.partial"])
+        #expect(manifestFiles() == ["B1.partial", "B4.json"])
+        #expect(downloads.partialDownloads() == [partial("B1")])
+    }
+
+    @Test func partialRecordRoundTripsPrivatelyAndIsNoManifest() throws {
+        defer { root.cleanUp() }
+        try downloads.writePartialDownload(partial("B1", committed: 2))
+        #expect(downloads.partialDownload(for: "B1") == partial("B1", committed: 2))
+        let mode = try FileManager.default.attributesOfItem(atPath: downloads.manifestFolder.appendingPathComponent("B1.partial").path)[.posixPermissions] as? Int
+        #expect(mode == 0o600)
+        #expect(downloads.manifests().isEmpty)
+        #expect(downloads.removeOrphanedManifests(keeping: []).isEmpty)
+        #expect(manifestFiles() == ["B1.partial"])
+    }
+
+    @Test func partialProgressIsTheFileSizeAgainstTheExpectedLength() throws {
+        defer { root.cleanUp() }
+        let record = partial("B1", expected: 10)
+        #expect(downloads.partialProgress(for: record) == nil)
+        try Data("abc".utf8).write(to: downloads.partialFileURL(for: "B1"))
+        #expect(downloads.partialProgress(for: record) == TransferProgress(bytesReceived: 3, bytesExpected: 10))
+        #expect(downloads.partialProgress(for: partial("B1", expected: 0)) == nil)
+    }
+
+    @Test func trashingADownloadDiscardsItsUnfinishedBytes() throws {
+        defer { root.cleanUp() }
+        try touch(".B1.download.partial")
+        try downloads.writePartialDownload(partial("B1"))
+        try downloads.trashDownload(asin: "B1")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: downloads.folder.path).isEmpty)
+        #expect(manifestFiles().isEmpty)
+        #expect(trashed.current.isEmpty)
+    }
 }

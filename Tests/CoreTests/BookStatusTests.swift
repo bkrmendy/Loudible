@@ -12,8 +12,11 @@ import TestSupport
         return job
     }
 
-    func resolve(_ jobs: [ExportJob], failure: (kind: ExportJob.Kind, message: String)? = nil, downloaded: Bool = false, exported: Bool = false) -> BookStatus {
-        BookStatus.resolve(asin: "B1", jobs: jobs, failure: failure, isDownloaded: downloaded, isExported: exported)
+    func resolve(
+        _ jobs: [ExportJob], failure: (kind: ExportJob.Kind, message: String)? = nil, partial: TransferProgress? = nil,
+        downloaded: Bool = false, exported: Bool = false
+    ) -> BookStatus {
+        BookStatus.resolve(asin: "B1", jobs: jobs, failure: failure, partial: partial, isDownloaded: downloaded, isExported: exported)
     }
 
     @Test func priorityRunningQueuedFailedExportedDownloaded() throws {
@@ -25,6 +28,15 @@ import TestSupport
         #expect(resolve([], downloaded: true, exported: true) == .exported)
         #expect(resolve([], downloaded: true) == .downloaded)
         #expect(resolve([]) == .none)
+    }
+
+    @Test func keptBytesShowWithAFailureOrAsPaused() throws {
+        let kept = TransferProgress(bytesReceived: 3, bytesExpected: 10)
+        let running = try job(.download, [.running(.downloading, progress: 0.3)])
+        #expect(resolve([running], failure: (.download, "x"), partial: kept) == .running(.download, progress: running.fractionCompleted))
+        #expect(resolve([try job(.download, [])], partial: kept) == .queued(.download))
+        #expect(resolve([], failure: (.export, "x"), partial: kept, exported: true) == .failed(.export, "x", kept: kept))
+        #expect(resolve([], partial: kept, exported: true) == .paused(kept))
     }
 
     @Test func ignoresFinishedJobsAndOtherBooks() throws {
@@ -39,9 +51,12 @@ import TestSupport
 
     func context(
         downloaded: Bool = false, exported: Bool = false, inLibrary: Bool = true,
-        manifest: Bool = true, signedIn: Bool = true
+        manifest: Bool = true, signedIn: Bool = true, partial: Bool = false
     ) -> BookMenu.Context {
-        BookMenu.Context(isDownloaded: downloaded, isExported: exported, isInLibrary: inLibrary, hasManifest: manifest, isSignedIn: signedIn)
+        BookMenu.Context(
+            isDownloaded: downloaded, isExported: exported, isInLibrary: inLibrary, hasManifest: manifest, isSignedIn: signedIn,
+            hasPartialDownload: partial
+        )
     }
 
     func actions(jobs: [ExportJob] = [], _ context: BookMenu.Context) -> [BookAction] {
@@ -58,6 +73,14 @@ import TestSupport
         #expect(export(context(manifest: false, signedIn: false))?.isEnabled == true)
         // There is nothing to download for a book that left the library.
         #expect(actions(context(inLibrary: false)) == [])
+    }
+
+    @Test func keptBytesOfferResumeAndDiscard() throws {
+        #expect(actions(context(partial: true)) == [.resumeDownload, .export, .deleteDownload])
+        // Out of the library: nothing to resume, but the bytes can still be discarded.
+        #expect(actions(context(inLibrary: false, partial: true)) == [.deleteDownload])
+        let running = try job(.download, [.running(.downloading, progress: 0.3)])
+        #expect(actions(jobs: [running], context(partial: true)) == [.cancel(jobID: running.id, kind: .download)])
     }
 
     @Test func runningOrQueuedJobsOfferCancelOnly() throws {

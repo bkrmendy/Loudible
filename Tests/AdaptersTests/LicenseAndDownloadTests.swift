@@ -172,7 +172,7 @@ import TestSupport
         #expect(reported.current.map(\.bytesReceived) == reported.current.map(\.bytesReceived).sorted())
     }
 
-    @Test func truncatedResponseFailsAndLeavesNothing() async throws {
+    @Test func truncatedResponseFailsAndKeepsWhatArrived() async throws {
         let server = try LocalHTTPServer(reply: .truncated(body: payload.prefix(50_000), declaredLength: payload.count))
         defer { server.stop() }
         let url = try await server.start()
@@ -183,7 +183,7 @@ import TestSupport
         await #expect(throws: ExporterError.self) {
             try await URLSessionFileDownloader().download(from: url, to: destination) { _ in }
         }
-        #expect(directory.contents().isEmpty)
+        #expect(try Data(contentsOf: destination) == payload.prefix(50_000))
     }
 
     @Test(arguments: [403, 404, 500])
@@ -201,7 +201,7 @@ import TestSupport
         #expect(directory.contents().isEmpty)
     }
 
-    @Test func cancellationStopsDownloadAndCleansUp() async throws {
+    @Test func cancellationStopsDownloadAndKeepsWhatArrived() async throws {
         let server = try LocalHTTPServer(reply: .stall(body: payload.prefix(10_000), declaredLength: payload.count))
         defer { server.stop() }
         let url = try await server.start()
@@ -209,15 +209,21 @@ import TestSupport
         defer { directory.cleanUp() }
         let destination = directory.url.appendingPathComponent("book.aaxc")
 
+        let checkpoints = Locked<[DownloadCheckpoint]>([])
+
         let task = Task {
-            try await URLSessionFileDownloader().download(from: url, to: destination) { _ in }
+            try await URLSessionFileDownloader().download(
+                from: url, to: destination, resume: nil, checkpoint: { value in checkpoints.withLock { $0.append(value) } }, progress: { _ in }
+            )
         }
         // The server has answered with a partial body and now holds the connection open.
         try await waitUntil { server.requestCount == 1 }
         try await Task.sleep(for: .milliseconds(100))
         task.cancel()
         await #expect(throws: ExporterError.cancelled) { try await task.value }
-        #expect(directory.contents().isEmpty)
+        #expect(try Data(contentsOf: destination) == payload.prefix(10_000))
+        // Flushed when the transfer stopped, so all of it can be continued.
+        #expect(checkpoints.current.last == DownloadCheckpoint(expectedLength: Int64(payload.count), validator: .none, committedLength: 10_000))
     }
 
     @Test func alreadyCancelledTaskDoesNotConnect() async throws {
@@ -234,5 +240,153 @@ import TestSupport
         await #expect(throws: (any Error).self) { try await task.value }
         #expect(server.requestCount == 0)
         #expect(directory.contents().isEmpty)
+    }
+
+    // MARK: Resuming
+
+    /// Downloads `file` into a destination that already holds `existing`, resuming from `resume`.
+    func resume(
+        _ file: LocalHTTPServer.File, existing: Data, from resume: ResumePoint, checkpointInterval: Int64 = 8 << 20
+    ) async throws -> (server: LocalHTTPServer, result: Data, checkpoints: [DownloadCheckpoint], progress: [TransferProgress]) {
+        let server = try LocalHTTPServer(reply: .file(file))
+        defer { server.stop() }
+        let url = try await server.start()
+        let directory = try TemporaryDirectory("download")
+        defer { directory.cleanUp() }
+        let destination = directory.url.appendingPathComponent("book.aaxc")
+        try existing.write(to: destination)
+        let checkpoints = Locked<[DownloadCheckpoint]>([])
+        let progress = Locked<[TransferProgress]>([])
+        try await URLSessionFileDownloader(checkpointInterval: checkpointInterval).download(
+            from: url, to: destination, resume: resume,
+            checkpoint: { value in checkpoints.withLock { $0.append(value) } },
+            progress: { value in progress.withLock { $0.append(value) } }
+        )
+        return (server, try Data(contentsOf: destination), checkpoints.current, progress.current)
+    }
+
+    var total: Int64 { Int64(payload.count) }
+
+    @Test func resumesWithRangeAndIfRange() async throws {
+        let file = LocalHTTPServer.File(body: payload, etag: "\"v1\"")
+        // Bytes after the committed length may not have survived a crash; they are rewritten.
+        let existing = payload.prefix(80_000) + Data(repeating: 0, count: 5_000)
+        let point = ResumePoint(committedLength: 80_000, expectedLength: total, validator: .etag("\"v1\""))
+
+        let run = try await resume(file, existing: existing, from: point)
+
+        #expect(run.result == payload)
+        #expect(run.server.requests.map { $0["range"] } == ["bytes=80000-"])
+        #expect(run.server.requests.first?["if-range"] == "\"v1\"")
+        #expect(run.checkpoints.first == DownloadCheckpoint(expectedLength: total, validator: .etag("\"v1\""), committedLength: 80_000))
+        #expect(run.checkpoints.last?.committedLength == total)
+        #expect(run.progress.first.map(\.bytesReceived).map { $0 >= 80_000 } == true)
+        #expect(run.progress.last == TransferProgress(bytesReceived: total, bytesExpected: total))
+    }
+
+    @Test func resumesWithLastModifiedOrSizeAlone() async throws {
+        let date = "Wed, 14 Oct 2026 10:00:00 GMT"
+        let byDate = try await resume(
+            LocalHTTPServer.File(body: payload, lastModified: date), existing: payload.prefix(1_000),
+            from: ResumePoint(committedLength: 1_000, expectedLength: total, validator: .lastModified(date))
+        )
+        #expect(byDate.result == payload)
+        #expect(byDate.server.requests.map { $0["range"] } == ["bytes=1000-"])
+        #expect(byDate.server.requests.first?["if-range"] == date)
+
+        let bySize = try await resume(
+            LocalHTTPServer.File(body: payload), existing: payload.prefix(1_000),
+            from: ResumePoint(committedLength: 1_000, expectedLength: total, validator: .none)
+        )
+        #expect(bySize.result == payload)
+        #expect(bySize.server.requests.map { $0["range"] } == ["bytes=1000-"])
+        #expect(bySize.server.requests.first?["if-range"] == nil)
+    }
+
+    @Test func serverIgnoringRangeStartsOver() async throws {
+        let run = try await resume(
+            LocalHTTPServer.File(body: payload, etag: "\"v1\"", honorsRange: false), existing: Data(repeating: 7, count: 1_000),
+            from: ResumePoint(committedLength: 1_000, expectedLength: total, validator: .etag("\"v1\""))
+        )
+        #expect(run.result == payload)
+        #expect(run.server.requestCount == 1)
+        #expect(run.checkpoints.first?.committedLength == 0)
+    }
+
+    @Test func changedFileStartsOver() async throws {
+        // A server honouring If-Range sends the new file whole.
+        let honest = try await resume(
+            LocalHTTPServer.File(body: payload, etag: "\"v2\""), existing: Data(repeating: 7, count: 1_000),
+            from: ResumePoint(committedLength: 1_000, expectedLength: total, validator: .etag("\"v1\""))
+        )
+        #expect(honest.result == payload)
+        #expect(honest.server.requestCount == 1)
+
+        // One that sends a range of the new file anyway is caught by the validator, and asked again.
+        let broken = try await resume(
+            LocalHTTPServer.File(body: payload, etag: "\"v2\"", ignoresIfRange: true), existing: Data(repeating: 7, count: 1_000),
+            from: ResumePoint(committedLength: 1_000, expectedLength: total, validator: .etag("\"v1\""))
+        )
+        #expect(broken.result == payload)
+        #expect(broken.server.requests.map { $0["range"] } == ["bytes=1000-", nil])
+    }
+
+    @Test func differentSizeWithoutValidatorStartsOver() async throws {
+        let run = try await resume(
+            LocalHTTPServer.File(body: payload), existing: Data(repeating: 7, count: 1_000),
+            from: ResumePoint(committedLength: 1_000, expectedLength: total + 1, validator: .none)
+        )
+        #expect(run.result == payload)
+        #expect(run.server.requests.map { $0["range"] } == ["bytes=1000-", nil])
+    }
+
+    @Test func unsatisfiableRangeStartsOver() async throws {
+        let run = try await resume(
+            LocalHTTPServer.File(body: payload, rangeStatus: 416), existing: payload.prefix(1_000),
+            from: ResumePoint(committedLength: 1_000, expectedLength: total, validator: .none)
+        )
+        #expect(run.result == payload)
+        #expect(run.server.requests.map { $0["range"] } == ["bytes=1000-", nil])
+    }
+
+    @Test func completeFileIsConfirmedByItsLastByte() async throws {
+        let run = try await resume(
+            LocalHTTPServer.File(body: payload, etag: "\"v1\""), existing: payload,
+            from: ResumePoint(committedLength: total, expectedLength: total, validator: .etag("\"v1\""))
+        )
+        #expect(run.result == payload)
+        #expect(run.server.requests.map { $0["range"] } == ["bytes=\(total - 1)-"])
+    }
+
+    @Test func checkpointsFollowFlushesDuringTheTransfer() async throws {
+        let run = try await resume(
+            LocalHTTPServer.File(body: payload, etag: "\"v1\"", pauseAfter: 60_000), existing: Data(),
+            from: ResumePoint(committedLength: 0, expectedLength: total, validator: .etag("\"v1\"")), checkpointInterval: 50_000
+        )
+        #expect(run.result == payload)
+        // On the response, once 50 000 bytes have arrived in the first part, and at the end.
+        let committed = run.checkpoints.map(\.committedLength)
+        #expect(committed.count >= 3)
+        #expect(committed.first == 0 && committed.last == total)
+        #expect(committed.dropFirst().first.map { $0 >= 50_000 && $0 <= 60_000 } == true)
+        #expect(committed == committed.sorted())
+    }
+
+    @Test func droppedConnectionKeepsTheBytesAndTheirCheckpoint() async throws {
+        let server = try LocalHTTPServer(reply: .file(LocalHTTPServer.File(body: payload, etag: "\"v1\"", dropAfter: 30_000)))
+        defer { server.stop() }
+        let url = try await server.start()
+        let directory = try TemporaryDirectory("download")
+        defer { directory.cleanUp() }
+        let destination = directory.url.appendingPathComponent("book.aaxc")
+        let checkpoints = Locked<[DownloadCheckpoint]>([])
+
+        await #expect(throws: ExporterError.self) {
+            try await URLSessionFileDownloader().download(
+                from: url, to: destination, resume: nil, checkpoint: { value in checkpoints.withLock { $0.append(value) } }, progress: { _ in }
+            )
+        }
+        #expect(try Data(contentsOf: destination) == payload.prefix(30_000))
+        #expect(checkpoints.current.last == DownloadCheckpoint(expectedLength: total, validator: .etag("\"v1\""), committedLength: 30_000))
     }
 }

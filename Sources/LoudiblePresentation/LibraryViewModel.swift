@@ -188,7 +188,8 @@ public final class LibraryViewModel {
     private func rebuildBooks() {
         let showsLocal = isSignedIn || !remoteBooks.isEmpty
         let extra = showsLocal ? localBooks.filter { !remoteASINs.contains($0.asin) } : []
-        let merged = remoteBooks + extra.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        let merged = (remoteBooks + extra.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending })
+            .filter { !LibraryRules.isHidden($0) }
         guard merged != books else { return }
         books = merged
         if !isCheckingMarketplaces { selection.reconcile(with: merged) }

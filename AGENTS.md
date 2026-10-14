@@ -113,10 +113,17 @@ SHA-256), and update the `61.*` libavformat check in `env.sh` and the dylib name
 - Kept downloads and exports: `~/Documents/Loudible/` (`CompositionRoot.downloadsFolder`), named
   `Title [ASIN].aaxc`/`.aax` and `Title [ASIN].m4b`. There is no export folder setting; the old
   `ExportDestinationPath` default is removed at launch. A book is "downloaded" when a non-hidden audio file there carries
-  `[ASIN]`; written as hidden `.….partial` files first, which are swept at launch.
+  `[ASIN]`; written as hidden `.….partial` files first. A download is written to
+  `.<ASIN>.download.partial` and kept, with a record, when it fails, the app quits or crashes, or the
+  user signs out; the next download of the book continues it (`Range`/`If-Range`). Cancel and
+  Delete Download discard it. Other `.partial` files are swept at launch.
 - Download manifests (keys, chapters, metadata) and covers:
   `~/Library/Application Support/<bundle id>/Downloads/<ASIN>.json|.cover`, mode 0600. A manifest
-  without its audio file is deleted on the next rescan.
+  without its audio file is deleted on the next rescan. Unfinished-download records (account,
+  size, validator, bytes flushed to disk) are `<ASIN>.partial` in the same folder. After each
+  complete library load, the signed-in account's records are resumed automatically, except ones
+  that failed in this session. Records of another account, or of books no longer in the library,
+  are deleted.
 - The old `~/Library/Caches/<bundle id>/Downloads` folder is no longer used and is removed at launch.
 - Bundle id `local.loudible.Loudible` (set in the Xcode project).
 

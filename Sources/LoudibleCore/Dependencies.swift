@@ -39,14 +39,73 @@ public struct TransferProgress: Sendable, Equatable {
     }
 }
 
-/// Downloads a URL completely to `destination`. Must not leave a file behind on failure.
+/// Identifies one version of a remote file, so bytes of two versions are never joined.
+public enum DownloadValidator: Sendable, Equatable, Codable {
+    case etag(String)
+    case lastModified(String)
+    /// The server sent neither; only the total length can be compared.
+    case none
+}
+
+/// Where an earlier attempt left off. Only the first `committedLength` bytes of the file are
+/// known to be on disk; anything after them may not have survived a crash or power loss.
+public struct ResumePoint: Sendable, Equatable {
+    public var committedLength: Int64
+    public var expectedLength: Int64
+    public var validator: DownloadValidator
+
+    public init(committedLength: Int64, expectedLength: Int64, validator: DownloadValidator) {
+        self.committedLength = committedLength
+        self.expectedLength = expectedLength
+        self.validator = validator
+    }
+}
+
+/// The state of a download as of its last flush to disk: what is needed to continue it later.
+public struct DownloadCheckpoint: Sendable, Equatable, Codable {
+    /// 0 when the server did not announce the size; such a download cannot be resumed.
+    public var expectedLength: Int64
+    public var validator: DownloadValidator
+    public var committedLength: Int64
+
+    public init(expectedLength: Int64, validator: DownloadValidator, committedLength: Int64) {
+        self.expectedLength = expectedLength
+        self.validator = validator
+        self.committedLength = committedLength
+    }
+
+    public var resumePoint: ResumePoint {
+        ResumePoint(committedLength: committedLength, expectedLength: expectedLength, validator: validator)
+    }
+}
+
+/// Downloads a URL completely to `destination`.
 public protocol FileDownloader: Sendable {
-    /// `progress` is called only once the size is known, and with the final count on success.
+    /// With `resume`, continues the file already at `destination` when the server can send the
+    /// rest of the same file, and starts over otherwise. On failure or cancellation it leaves
+    /// what it wrote; the caller decides whether to keep it.
+    /// - Parameters:
+    ///   - checkpoint: called once the response arrives, then whenever written bytes have been
+    ///     flushed to disk.
+    ///   - progress: called only once the size is known, and with the final count on success.
     func download(
         from url: URL,
         to destination: URL,
+        resume: ResumePoint?,
+        checkpoint: @escaping @Sendable (DownloadCheckpoint) -> Void,
         progress: @escaping @Sendable (TransferProgress) -> Void
     ) async throws
+}
+
+extension FileDownloader {
+    /// A fresh download nobody intends to resume.
+    public func download(
+        from url: URL,
+        to destination: URL,
+        progress: @escaping @Sendable (TransferProgress) -> Void
+    ) async throws {
+        try await download(from: url, to: destination, resume: nil, checkpoint: { _ in }, progress: progress)
+    }
 }
 
 /// Metadata written into the exported file in addition to what the source carries.

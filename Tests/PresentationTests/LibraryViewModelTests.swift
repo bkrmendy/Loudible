@@ -121,6 +121,21 @@ import TestSupport
         #expect(model.loadState == .idle)
     }
 
+    @Test func hidesBooksWithMorningInTheTitle() async throws {
+        api.libraryHandler.withLock {
+            $0 = { _, _, marketplace, _ in
+                LibraryPage(entries: marketplace == .us ? [
+                    Fixtures.entry("B1", title: "Good morning, Midnight"),
+                    Fixtures.entry("B2", title: "Evening"),
+                ] : [])
+            }
+        }
+        let model = try await makeModel()
+        await model.refresh()
+        model.applyLocal([Fixtures.book("B3", title: "MORNINGS")])
+        #expect(model.books.map(\.asin) == ["B2"])
+    }
+
     @Test func downloadedBookDroppedByRefreshStaysVisible() async throws {
         scriptLibrary(["B1", "B2"])
         let model = try await makeModel()

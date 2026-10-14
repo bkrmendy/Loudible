@@ -1,7 +1,7 @@
 import Foundation
 
 /// The one status shown on a book's cover. When several apply, the most relevant wins:
-/// running > queued > failed > exported > downloaded > none.
+/// running > queued > failed > paused > exported > downloaded > none.
 public enum BookStatus: Sendable, Equatable {
     case none
     /// Queued, or paused for sign-in.
@@ -10,17 +10,23 @@ public enum BookStatus: Sendable, Equatable {
     /// file is downloading.
     case running(ExportJob.Kind, progress: Double, transferred: TransferProgress? = nil)
     /// The latest attempt failed. Kept in memory only; cleared when the next attempt starts.
-    case failed(ExportJob.Kind, String)
+    /// `kept` is the part of the download kept for the next attempt.
+    case failed(ExportJob.Kind, String, kept: TransferProgress? = nil)
+    /// An unfinished download is kept and nothing is running: it continues after signing in, or
+    /// from the menu.
+    case paused(TransferProgress)
     case downloaded
     case exported
 
     /// - Parameters:
     ///   - jobs: the queue's jobs; only unfinished jobs of `asin` are considered.
     ///   - failure: the failure of the book's latest attempt, if it failed.
+    ///   - partial: how much of an unfinished download is kept, if any.
     public static func resolve(
         asin: String,
         jobs: [ExportJob],
         failure: (kind: ExportJob.Kind, message: String)?,
+        partial: TransferProgress? = nil,
         isDownloaded: Bool,
         isExported: Bool
     ) -> BookStatus {
@@ -31,7 +37,8 @@ public enum BookStatus: Sendable, Equatable {
         if let job = active.first {
             return .queued(job.kind)
         }
-        if let failure { return .failed(failure.kind, failure.message) }
+        if let failure { return .failed(failure.kind, failure.message, kept: partial) }
+        if let partial { return .paused(partial) }
         if isExported { return .exported }
         if isDownloaded { return .downloaded }
         return .none
@@ -41,6 +48,8 @@ public enum BookStatus: Sendable, Equatable {
 /// Something the user can do to one book from its menu.
 public enum BookAction: Sendable, Hashable {
     case download
+    /// Download, continuing the bytes kept from an earlier attempt.
+    case resumeDownload
     case cancel(jobID: UUID, kind: ExportJob.Kind)
     case export
     case showDownload
@@ -72,16 +81,19 @@ public enum BookMenu {
         public var isInLibrary: Bool
         public var hasManifest: Bool
         public var isSignedIn: Bool
+        /// Whether bytes of an unfinished download are kept.
+        public var hasPartialDownload: Bool
 
         public init(
             isDownloaded: Bool, isExported: Bool, isInLibrary: Bool,
-            hasManifest: Bool, isSignedIn: Bool
+            hasManifest: Bool, isSignedIn: Bool, hasPartialDownload: Bool = false
         ) {
             self.isDownloaded = isDownloaded
             self.isExported = isExported
             self.isInLibrary = isInLibrary
             self.hasManifest = hasManifest
             self.isSignedIn = isSignedIn
+            self.hasPartialDownload = hasPartialDownload
         }
     }
 
@@ -90,7 +102,7 @@ public enum BookMenu {
         let active = jobs.filter { $0.book.asin == asin && !$0.state.isFinished }
         var items: [BookMenuItem] = []
         if !context.isDownloaded && context.isInLibrary && active.isEmpty {
-            items.append(BookMenuItem(.download))
+            items.append(BookMenuItem(context.hasPartialDownload ? .resumeDownload : .download))
         }
         for job in active {
             items.append(BookMenuItem(.cancel(jobID: job.id, kind: job.kind)))
@@ -105,7 +117,7 @@ public enum BookMenu {
         if context.isExported {
             items.append(BookMenuItem(.showExport))
         }
-        if context.isDownloaded && active.isEmpty {
+        if (context.isDownloaded || context.hasPartialDownload) && active.isEmpty {
             items.append(BookMenuItem(.deleteDownload))
         }
         return items

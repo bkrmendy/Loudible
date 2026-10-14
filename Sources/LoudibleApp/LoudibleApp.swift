@@ -49,20 +49,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
-    /// With jobs running, asks first; on confirmation cancels them and quits once their partial
-    /// files are removed. There is no resume, since download URLs expire.
+    /// Suspends the jobs and quits once the downloads in progress have saved their bytes, to be
+    /// continued at the next launch. Asks first only when exports or jobs that haven't started
+    /// would be lost.
     @MainActor
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model, model.hasActiveJobs else { return .terminateNow }
-        let count = model.export.activeJobCount
-        let alert = NSAlert()
-        alert.messageText = count == 1 ? "1 job in progress. Quit anyway?" : "\(count) jobs in progress. Quit anyway?"
-        alert.informativeText = "Unfinished downloads and exports are discarded. Finished files are kept."
-        alert.addButton(withTitle: "Quit")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
+        if model.export.hasWorkSuspendLoses {
+            let alert = NSAlert()
+            alert.messageText = "Quit and cancel the exports and queued jobs?"
+            alert.informativeText = "Exports in progress and queued jobs are cancelled. Downloads in progress continue next time. Finished files are kept."
+            alert.addButton(withTitle: "Quit")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
+        }
         Task { @MainActor in
-            await model.export.cancel()
+            await model.export.suspend()
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater

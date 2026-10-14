@@ -62,18 +62,26 @@ struct ContentView: View {
             )
         }
         .confirmationDialog(
-            "Move “\(pendingDelete?.title ?? "")” to the Trash?",
+            pendingDeleteIsPartial
+                ? "Discard the unfinished download of “\(pendingDelete?.title ?? "")”?"
+                : "Move “\(pendingDelete?.title ?? "")” to the Trash?",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
             presenting: pendingDelete
         ) { book in
-            Button("Move to Trash", role: .destructive) {
+            Button(pendingDeleteIsPartial ? "Discard" : "Move to Trash", role: .destructive) {
                 Task { await model.deleteDownload(book) }
             }
         } message: { _ in
-            Text("The exported M4B is not affected.")
+            Text(pendingDeleteIsPartial ? "The next download starts from the beginning." : "The exported M4B is not affected.")
         }
         .removingToolbarTitle()
         .loginSheet(for: model.session)
+    }
+
+    /// Whether the book to delete has only an unfinished download, which is deleted outright.
+    private var pendingDeleteIsPartial: Bool {
+        guard let book = pendingDelete else { return false }
+        return model.downloadedFiles[book.asin] == nil
     }
 
     private var isSignedOutAndEmpty: Bool {
@@ -126,7 +134,7 @@ struct ContentView: View {
             if let url = model.exportedFiles[book.asin] { NSWorkspace.shared.activateFileViewerSelecting([url]) }
         case .deleteDownload:
             pendingDelete = book
-        case .download, .cancel, .export:
+        case .download, .resumeDownload, .cancel, .export:
             Task { await model.perform(action, on: book) }
         }
     }

@@ -12,11 +12,14 @@ extension BookStatus {
         case .running(let kind, let progress, let transferred):
             ["\(kind == .download ? "Downloading" : "Exporting")", "\(Int((progress * 100).rounded(.down))) percent",
              transferred.map { "\($0.receivedText) of \($0.expectedText)" }].compactMap { $0 }.joined(separator: ", ")
-        case .failed(let kind, let reason):
+        case .failed(let kind, let reason, let kept):
             // Some reasons already say what failed ("Download failed: HTTP 500").
-            reason.localizedCaseInsensitiveContains("failed:")
+            [reason.localizedCaseInsensitiveContains("failed:")
                 ? reason
-                : "\(kind == .download ? "Download" : "Export") failed: \(reason)"
+                : "\(kind == .download ? "Download" : "Export") failed: \(reason)",
+             kept.map { "\($0.receivedText) of \($0.expectedText) downloaded" }].compactMap { $0 }.joined(separator: ", ")
+        case .paused(let kept):
+            "Download paused, \(kept.receivedText) of \(kept.expectedText)"
         case .downloaded:
             "Downloaded"
         case .exported:

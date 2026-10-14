@@ -357,7 +357,7 @@ import TestSupport
     }
 
     @Test(arguments: [ExportJob.Kind.download, .export])
-    func downloadFailureRemovesThePartial(kind: ExportJob.Kind) async throws {
+    func downloadFailureKeepsTheBytesForTheNextDownload(kind: ExportJob.Kind) async throws {
         defer { cleanUp() }
         downloader.handler.withLock {
             $0 = { _, destination in
@@ -367,10 +367,79 @@ import TestSupport
         }
         let snapshot = try await runToCompletion(books(1), kind: kind)
         #expect(snapshot.jobs[0].state == .failed("Book 1: Download failed: HTTP 500"))
-        #expect(downloadsContents().isEmpty)
-        #expect(manifestContents().isEmpty)
+        #expect(downloadsContents() == [".B000000001.download.partial"])
+        #expect(manifestContents() == ["B000000001.partial"])
+        let record = try #require(downloads.partialDownload(for: "B000000001"))
+        #expect(record.customerID == Fixtures.session().customerID)
+        #expect(record.checkpoint == DownloadCheckpoint(
+            expectedLength: downloader.expectedLength, validator: MockDownloader.validator, committedLength: 7
+        ))
         #expect(destination.contents().isEmpty)
         #expect(converter.requests.current.isEmpty)
+    }
+
+    @Test func nextDownloadContinuesTheKeptBytesWithAFreshLicense() async throws {
+        defer { cleanUp() }
+        downloader.handler.withLock {
+            $0 = { _, destination in
+                try Data("partial".utf8).write(to: destination)
+                throw ExporterError.download("HTTP 500")
+            }
+        }
+        let (queue, _) = try await makeQueue()
+        try await queue.enqueue(books(1), kind: .download, exportDestination: nil)
+        await queue.waitUntilFinished()
+        downloader.handler.withLock { $0 = { _, destination in try Data("encrypted".utf8).write(to: destination) } }
+
+        try await queue.enqueue(books(1), kind: .download, exportDestination: nil)
+        await queue.waitUntilFinished()
+
+        #expect(await queue.currentSnapshot.jobs[0].state == .completed(downloads.folder.appendingPathComponent("Book 1 [B000000001].aaxc")))
+        #expect(downloader.resumes.current.first! == nil)
+        #expect(downloader.resumes.current.last! == ResumePoint(
+            committedLength: 7, expectedLength: downloader.expectedLength, validator: MockDownloader.validator
+        ))
+        #expect(api.requestedLicenses.current == ["B000000001", "B000000001"])
+        #expect(downloadsContents() == ["Book 1 [B000000001].aaxc"])
+        #expect(manifestContents() == ["B000000001.json"])
+    }
+
+    @Test func anotherAccountsBytesAreDiscarded() async throws {
+        defer { cleanUp() }
+        try downloads.ensureFolder()
+        try Data("theirs".utf8).write(to: downloads.partialFileURL(for: "B000000001"))
+        try downloads.writePartialDownload(PartialDownload(
+            book: books(1)[0], customerID: "amzn1.account.SOMEONE.ELSE", fileExtension: "aaxc",
+            checkpoint: DownloadCheckpoint(expectedLength: 9, validator: .none, committedLength: 6), updatedAt: Fixtures.referenceDate
+        ))
+        let snapshot = try await runToCompletion(books(1), kind: .download)
+        #expect(snapshot.jobs[0].state == .completed(downloads.folder.appendingPathComponent("Book 1 [B000000001].aaxc")))
+        #expect(downloader.resumes.current.first! == nil)
+        #expect(try Data(contentsOf: downloads.folder.appendingPathComponent("Book 1 [B000000001].aaxc")) == Data("encrypted".utf8))
+        #expect(manifestContents() == ["B000000001.json"])
+    }
+
+    @Test(arguments: [ExportJob.Kind.download, .export])
+    func suspendDuringDownloadKeepsTheBytes(kind: ExportJob.Kind) async throws {
+        defer { cleanUp() }
+        let gate = AsyncGate()
+        downloader.handler.withLock {
+            $0 = { _, destination in
+                try Data("partial".utf8).write(to: destination)
+                await gate.wait()
+                throw ExporterError.cancelled
+            }
+        }
+        let (queue, _) = try await makeQueue()
+        try await queue.enqueue(books(1) + [Fixtures.book("B000000002", title: "Book 2")], kind: kind, exportDestination: destination.url)
+        try await waitUntil { downloader.downloads.current.count == 1 }
+        await queue.suspend()
+        await gate.open()
+        await queue.waitUntilFinished()
+        #expect(await queue.currentSnapshot.jobs.map(\.state) == [.cancelled, .cancelled])
+        #expect(downloadsContents() == [".B000000001.download.partial"])
+        #expect(manifestContents() == ["B000000001.partial"])
+        #expect(destination.contents().isEmpty)
     }
 
     @Test func conversionFailureRemovesPartialOutputButKeepsDownload() async throws {

@@ -9,9 +9,13 @@ import Foundation
 ///
 /// Jobs for one book run strictly in the order they were queued; up to `maximumConcurrentBooks`
 /// different books run at once. Work can be added while jobs run. A failed job does not stop the
-/// others, finished files are never touched again, and partial files are removed whatever the
-/// outcome. When Audible requires a new sign-in, the affected jobs pause until
-/// `resumeAfterAuthentication()` or `cancel()`, and no new job starts meanwhile.
+/// others, and finished files are never touched again. When Audible requires a new sign-in, the
+/// affected jobs pause until `resumeAfterAuthentication()` or `cancel()`, and no new job starts
+/// meanwhile.
+///
+/// A download that fails or is stopped by `suspend()` keeps its bytes as a `PartialDownload`, and
+/// the book's next download continues them; `cancel()` deletes them. A crash keeps them as well,
+/// up to the last checkpoint. Other partial files (exports) are removed whatever the outcome.
 public actor ExportQueue {
     public struct Snapshot: Sendable, Equatable {
         public var jobs: [ExportJob]
@@ -57,6 +61,8 @@ public actor ExportQueue {
     private var running: [UUID: Task<Void, Never>] = [:]
     private var exportDestinations: [UUID: URL] = [:]
     private var authenticationWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
+    /// Running jobs stopped by `suspend()`: their downloads keep their bytes.
+    private var suspended: Set<UUID> = []
     private var finishWaiters: [CheckedContinuation<Void, Never>] = []
 
     /// - Parameters:
@@ -158,6 +164,13 @@ public actor ExportQueue {
         finishIfIdle()
     }
 
+    /// Stops every job like `cancel()`, but a download in progress keeps its bytes, to be
+    /// continued by the book's next download. Used when the app quits or the user signs out.
+    public func suspend() {
+        suspended.formUnion(running.keys)
+        cancel()
+    }
+
     /// Cancels one job: a running one stops, a queued one is skipped. Finished jobs and unknown
     /// ids are ignored.
     public func cancel(_ id: UUID) {
@@ -214,6 +227,7 @@ public actor ExportQueue {
 
     private func jobEnded(_ id: UUID) {
         running[id] = nil
+        suspended.remove(id)
         exportDestinations[id] = nil
         schedule()
     }
@@ -277,9 +291,9 @@ public actor ExportQueue {
             return existing
         }
         update(id, to: .running(.licensing, progress: 0))
-        let license = try await fetchLicense(for: book)
+        let (license, customerID) = try await fetchLicense(for: book)
         try checkCancellation()
-        return try await download(id, book: book, license: license, kind: .download)
+        return try await download(id, book: book, license: license, customerID: customerID, kind: .download)
     }
 
     private func exportOnce(_ id: UUID, book: Audiobook, destination: URL) async throws(ExporterError) -> URL {
@@ -291,9 +305,9 @@ public actor ExportQueue {
             isKeptDownload = true
         } else {
             update(id, to: .running(.licensing, progress: 0))
-            let fresh = try await fetchLicense(for: book)
+            let (fresh, customerID) = try await fetchLicense(for: book)
             try checkCancellation()
-            input = try await download(id, book: book, license: fresh, kind: .export)
+            input = try await download(id, book: book, license: fresh, customerID: customerID, kind: .export)
             license = fresh
             isKeptDownload = false
         }
@@ -307,7 +321,7 @@ public actor ExportQueue {
             (decryption, chapters) = (manifest.decryption, manifest.chapters)
         } else {
             update(id, to: .running(.licensing, progress: 0))
-            let fresh = try await fetchLicense(for: book)
+            let (fresh, _) = try await fetchLicense(for: book)
             (decryption, chapters) = (fresh.decryption, fresh.chapters)
         }
         try checkCancellation()
@@ -336,44 +350,71 @@ public actor ExportQueue {
         return try moveIntoPlace(partial, directory: destination, base: base, extension: ExportFileNaming.fileExtension)
     }
 
-    private func fetchLicense(for book: Audiobook) async throws(ExporterError) -> ContentLicense {
+    /// The license, and the account that got it.
+    private func fetchLicense(for book: Audiobook) async throws(ExporterError) -> (ContentLicense, customerID: String) {
         let api = self.api
         return try await auth.withValidSession { session in
-            try await api.license(for: book.asin, marketplace: book.marketplace, session: session)
+            (try await api.license(for: book.asin, marketplace: book.marketplace, session: session), session.customerID)
         }
     }
 
-    /// Downloads into a hidden partial in the downloads folder, writes the manifest, then moves
-    /// the file to `Title [ASIN].<ext>`. The partial is removed whatever happens.
-    private func download(_ id: UUID, book: Audiobook, license: ContentLicense, kind: ExportJob.Kind) async throws(ExporterError) -> URL {
+    /// Downloads into the book's hidden partial file in the downloads folder, continuing the bytes
+    /// an earlier attempt of the same account left there, writes the manifest, then moves the file
+    /// to `Title [ASIN].<ext>`. The license is always fresh, since its download URL expires.
+    /// On failure or suspension the bytes are kept; on cancellation they are deleted.
+    private func download(
+        _ id: UUID, book: Audiobook, license: ContentLicense, customerID: String, kind: ExportJob.Kind
+    ) async throws(ExporterError) -> URL {
         let ext = license.decryption.fileExtension
         let base = ExportFileNaming.baseName(for: book, extension: ext)
-        let token = UUID().uuidString
-        let partial = downloads.folder.appendingPathComponent(ExportFileNaming.partialName(base: base, token: token))
-        let cover = downloads.manifestFolder.appendingPathComponent(".\(book.asin).\(token).cover")
-        defer {
-            try? fileManager.removeItem(at: partial)
-            try? fileManager.removeItem(at: cover)
+        let partial = downloads.partialFileURL(for: book.asin)
+        let cover = downloads.manifestFolder.appendingPathComponent(".\(book.asin).\(UUID().uuidString).cover")
+        defer { try? fileManager.removeItem(at: cover) }
+
+        var resume: ResumePoint?
+        if let record = downloads.partialDownload(for: book.asin),
+           record.customerID == customerID, record.fileExtension == ext, record.checkpoint.expectedLength > 0 {
+            resume = record.checkpoint.resumePoint
+        } else {
+            downloads.removePartialDownload(asin: book.asin)
         }
 
-        update(id, to: .running(.downloading, progress: 0))
-        try await perform {
-            try await self.downloader.download(from: license.downloadURL, to: partial, progress: self.downloadProgressHandler(id))
-        }
-        try checkCancellation()
+        do throws(ExporterError) {
+            update(id, to: .running(.downloading, progress: 0))
+            let downloads = self.downloads
+            try await perform {
+                try await self.downloader.download(
+                    from: license.downloadURL, to: partial, resume: resume,
+                    checkpoint: { checkpoint in
+                        // Best effort: without a record the bytes are simply not resumed.
+                        try? downloads.writePartialDownload(PartialDownload(
+                            book: book, customerID: customerID, fileExtension: ext, checkpoint: checkpoint, updatedAt: Date()
+                        ))
+                    },
+                    progress: self.downloadProgressHandler(id)
+                )
+            }
+            try checkCancellation()
 
-        if kind == .download { update(id, to: .running(.finalizing, progress: 0)) }
-        // The cover is a nicety for books that later leave the library; failing to get it is fine.
-        if let coverURL = book.coverImageURL {
-            try? await downloader.download(from: coverURL, to: cover, progress: { _ in })
-        }
-        try checkCancellation()
-        let manifest = DownloadManifest(book: book, decryption: license.decryption, chapters: license.chapters, downloadedAt: Date())
-        try downloads.writeManifest(manifest, coverFile: fileManager.fileExists(atPath: cover.path) ? cover : nil)
-        do {
-            return try moveIntoPlace(partial, directory: downloads.folder, base: base, extension: ext)
+            if kind == .download { update(id, to: .running(.finalizing, progress: 0)) }
+            // The cover is a nicety for books that later leave the library; failing to get it is fine.
+            if let coverURL = book.coverImageURL {
+                try? await downloader.download(from: coverURL, to: cover, progress: { _ in })
+            }
+            try checkCancellation()
+            let manifest = DownloadManifest(book: book, decryption: license.decryption, chapters: license.chapters, downloadedAt: Date())
+            try downloads.writeManifest(manifest, coverFile: fileManager.fileExists(atPath: cover.path) ? cover : nil)
+            let url: URL
+            do {
+                url = try moveIntoPlace(partial, directory: downloads.folder, base: base, extension: ext)
+            } catch {
+                downloads.removeManifest(asin: book.asin)
+                throw error
+            }
+            downloads.removePartialDownload(asin: book.asin)
+            return url
         } catch {
-            downloads.removeManifest(asin: book.asin)
+            if Task.isCancelled && !suspended.contains(id) { downloads.removePartialDownload(asin: book.asin) }
             throw error
         }
     }

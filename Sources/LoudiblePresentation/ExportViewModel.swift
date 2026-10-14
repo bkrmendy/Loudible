@@ -113,6 +113,27 @@ public final class ExportViewModel {
         apply(await queue.currentSnapshot)
     }
 
+    /// Stops every job and removes them all from the list, like `cancel()`, but downloads in
+    /// progress keep their bytes, to be continued later.
+    public func suspend() async {
+        await queue.suspend()
+        await queue.waitUntilFinished()
+        await queue.clear()
+        apply(await queue.currentSnapshot)
+    }
+
+    /// Whether an export or a job that hasn't started is unfinished: the work `suspend()` loses.
+    /// Running downloads keep their bytes.
+    public var hasWorkSuspendLoses: Bool {
+        jobs.contains { job in
+            switch job.state {
+            case .running: job.kind == .export
+            case .queued, .waitingForAuthentication: true
+            case .completed, .failed, .cancelled: false
+            }
+        }
+    }
+
     /// Cancels one job; the others continue.
     public func cancel(jobID: UUID) async {
         await queue.cancel(jobID)
