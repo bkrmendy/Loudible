@@ -51,6 +51,8 @@ public struct ExportJob: Sendable, Identifiable, Equatable {
     /// The phase the job started in. An export of a downloaded book starts at `.converting`, and
     /// its progress is measured from there.
     public private(set) var firstPhase: Phase?
+    /// Bytes of the audio download so far; only while in `.downloading` and once its size is known.
+    public private(set) var transferred: TransferProgress?
 
     public init(book: Audiobook, kind: Kind = .export, id: UUID = UUID()) {
         self.id = id
@@ -59,12 +61,14 @@ public struct ExportJob: Sendable, Identifiable, Equatable {
         self.state = .queued
     }
 
-    public mutating func transition(to newState: State) throws(InvalidTransition) {
+    /// - Parameter transferred: the byte count behind a `.downloading` state; ignored otherwise.
+    public mutating func transition(to newState: State, transferred: TransferProgress? = nil) throws(InvalidTransition) {
         guard Self.allows(from: state, to: newState) else {
             throw InvalidTransition(from: state, to: newState)
         }
         if firstPhase == nil, case .running(let phase, _) = newState { firstPhase = phase }
         state = newState
+        if case .running(.downloading, _) = newState { self.transferred = transferred } else { self.transferred = nil }
     }
 
     static func allows(from old: State, to new: State) -> Bool {

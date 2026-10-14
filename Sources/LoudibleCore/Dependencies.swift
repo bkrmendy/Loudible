@@ -23,12 +23,29 @@ public protocol CredentialStore: Sendable {
     func delete() throws
 }
 
+/// How much of a download has arrived.
+public struct TransferProgress: Sendable, Equatable {
+    public var bytesReceived: Int64
+    public var bytesExpected: Int64
+
+    public init(bytesReceived: Int64, bytesExpected: Int64) {
+        self.bytesReceived = bytesReceived
+        self.bytesExpected = bytesExpected
+    }
+
+    /// 0...1; 0 while the size is unknown.
+    public var fraction: Double {
+        bytesExpected > 0 ? min(max(Double(bytesReceived) / Double(bytesExpected), 0), 1) : 0
+    }
+}
+
 /// Downloads a URL completely to `destination`. Must not leave a file behind on failure.
 public protocol FileDownloader: Sendable {
+    /// `progress` is called only once the size is known, and with the final count on success.
     func download(
         from url: URL,
         to destination: URL,
-        progress: @escaping @Sendable (Double) -> Void
+        progress: @escaping @Sendable (TransferProgress) -> Void
     ) async throws
 }
 

@@ -50,6 +50,17 @@ import TestSupport
         #expect(job.state == .running(.licensing, progress: 0))
     }
 
+    @Test func byteCountIsKeptOnlyWhileDownloading() throws {
+        var job = job()
+        let bytes = TransferProgress(bytesReceived: 132, bytesExpected: 288)
+        try job.transition(to: .running(.licensing, progress: 0), transferred: bytes)
+        #expect(job.transferred == nil)
+        try job.transition(to: .running(.downloading, progress: bytes.fraction), transferred: bytes)
+        #expect(job.transferred == bytes)
+        try job.transition(to: .running(.converting, progress: 0))
+        #expect(job.transferred == nil)
+    }
+
     @Test func queuedJobCanStartInAnyPhaseButNotComplete() throws {
         var job = job()
         #expect(throws: ExportJob.InvalidTransition.self) { try job.transition(to: .completed(URL(fileURLWithPath: "/x"))) }

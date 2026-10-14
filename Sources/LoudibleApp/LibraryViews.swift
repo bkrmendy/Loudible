@@ -1,3 +1,4 @@
+import AppKit
 import LoudibleCore
 import LoudiblePresentation
 import SwiftUI
@@ -26,6 +27,8 @@ struct LibraryGridContent: View {
     let tile: (Audiobook) -> BookTileState
     let toggle: (Audiobook) -> Void
     let perform: (BookAction, Audiobook) -> Void
+    /// Called for a click on the background, between or below the tiles.
+    var clearSelection: () -> Void = {}
 
     private let columns = [
         GridItem(.adaptive(minimum: 130, maximum: 170), spacing: 18, alignment: .top)
@@ -45,12 +48,19 @@ struct LibraryGridContent: View {
                 }
             }
             .padding(20)
+            .background { backgroundClickTarget }
         }
+        // The grid only covers its rows; this takes clicks in the empty space below them.
+        .background { backgroundClickTarget }
         .overlay {
             if isLibraryEmpty, let placeholder {
                 Text(placeholder).foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var backgroundClickTarget: some View {
+        Color.clear.contentShape(Rectangle()).onTapGesture(perform: clearSelection)
     }
 
     /// Nothing while signed out: the window shows its sign-in prompt there instead.
@@ -157,7 +167,10 @@ struct BookTile: View {
                         if !state.isInLibrary {
                             Text("Not in library").font(.caption2).foregroundStyle(.orange)
                         }
-                        if let length = book.runtimeMinutes.map({ "\($0 / 60)h \($0 % 60)m" }) {
+                        // Takes the runtime's place while downloading, so the tile keeps its height.
+                        if case .running(_, _, let transferred?) = state.status {
+                            Text(transferred.text).font(.caption2).monospacedDigit().foregroundStyle(.secondary)
+                        } else if let length = book.runtimeMinutes.map({ "\($0 / 60)h \($0 % 60)m" }) {
                             Text(length).font(.caption2).foregroundStyle(.tertiary)
                         }
                     }
@@ -173,7 +186,7 @@ struct BookTile: View {
                 Menu {
                     BookMenuContent(items: state.menuItems, perform: perform)
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Image(nsImage: .verticalEllipsis)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
@@ -267,7 +280,7 @@ private struct BookStatusBadge: View {
             nil
         case .queued:
             AnyView(icon("clock", .white))
-        case .running(let kind, let progress):
+        case .running(let kind, let progress, _):
             AnyView(ProgressRing(progress: progress, color: kind == .export ? .accentColor : .white))
         case .downloaded:
             AnyView(icon("arrow.down.circle.fill", .white))
@@ -295,6 +308,28 @@ private struct ProgressRing: View {
         }
         .padding(1)
     }
+}
+
+extension NSImage {
+    /// SF Symbols has no plain vertical ellipsis, and a menu's label ignores `rotationEffect`, so
+    /// this is the horizontal one turned upright, as a template image so it takes the menu's tint.
+    fileprivate static let verticalEllipsis: NSImage = {
+        let symbol = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: nil)!
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(textStyle: .body, scale: .large))!
+        let size = NSSize(width: symbol.size.height, height: symbol.size.width)
+        let image = NSImage(size: size, flipped: false) { rect in
+            let transform = NSAffineTransform()
+            transform.translateX(by: rect.midX, yBy: rect.midY)
+            transform.rotate(byDegrees: 90)
+            transform.concat()
+            symbol.draw(in: NSRect(x: -symbol.size.width / 2, y: -symbol.size.height / 2,
+                                   width: symbol.size.width, height: symbol.size.height))
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "More actions"
+        return image
+    }()
 }
 
 extension BookAction {

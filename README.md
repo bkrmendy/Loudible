@@ -57,7 +57,9 @@ The app is ad-hoc signed, not notarized. The first time, open it once, then allo
    keeps the file. If a file with that name already exists, the new one gets a numbered
    suffix: `Title [ASIN] (2).m4b`.
 4. Each book has a menu (the dots next to its title, or right-click) with Download, Cancel,
-   Export to M4B, Show in Finder, Show Exported File in Finder, and Delete Download.
+   Export to M4B, Show in Finder, Show Exported File in Finder, and Delete Download. Click covers
+   to select several books; Download and Export buttons then appear in the toolbar and act on
+   every selected book that offers them.
 5. A badge on the cover shows the book's state: queued, downloading or exporting (a progress
    ring), or downloaded.
 

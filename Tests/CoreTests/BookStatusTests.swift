@@ -52,8 +52,10 @@ import TestSupport
         BookMenu.items(asin: "B1", jobs: jobs, context: context).first { $0.action == .export }
     }
 
-    @Test func notDownloadedOffersDownloadOnly() {
-        #expect(actions(context()) == [.download])
+    @Test func notDownloadedOffersDownloadAndExport() {
+        #expect(actions(context()) == [.download, .export])
+        // Like Download, it fetches the keys when the job runs.
+        #expect(export(context(manifest: false, signedIn: false))?.isEnabled == true)
         // There is nothing to download for a book that left the library.
         #expect(actions(context(inLibrary: false)) == [])
     }
@@ -72,8 +74,8 @@ import TestSupport
         #expect(export(context(downloaded: true))?.isEnabled == true)
     }
 
-    @Test func exportedWithoutDownloadOffersDownloadAndShowExport() {
-        #expect(actions(context(exported: true)) == [.download, .showExport])
+    @Test func exportedWithoutDownloadOffersDownloadExportAndShowExport() {
+        #expect(actions(context(exported: true)) == [.download, .export, .showExport])
     }
 
     @Test func busyDownloadedBookDisablesExportAndHidesDelete() throws {

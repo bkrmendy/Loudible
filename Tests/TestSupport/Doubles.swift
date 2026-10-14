@@ -141,11 +141,11 @@ public final class MockDownloader: FileDownloader, @unchecked Sendable {
         handler = Locked { _, destination in try contents.write(to: destination) }
     }
 
-    public func download(from url: URL, to destination: URL, progress: @escaping @Sendable (Double) -> Void) async throws {
+    public func download(from url: URL, to destination: URL, progress: @escaping @Sendable (TransferProgress) -> Void) async throws {
         downloads.withLock { $0.append((url, destination)) }
-        progress(0.5)
+        progress(TransferProgress(bytesReceived: 50, bytesExpected: 100))
         try await handler.current(url, destination)
-        progress(1)
+        progress(TransferProgress(bytesReceived: 100, bytesExpected: 100))
     }
 }
 

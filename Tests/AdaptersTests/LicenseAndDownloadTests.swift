@@ -162,13 +162,14 @@ import TestSupport
         let directory = try TemporaryDirectory("download")
         defer { directory.cleanUp() }
         let destination = directory.url.appendingPathComponent("book.aaxc")
-        let reported = Locked<[Double]>([])
+        let reported = Locked<[TransferProgress]>([])
 
         try await URLSessionFileDownloader().download(from: url, to: destination) { value in reported.withLock { $0.append(value) } }
 
         #expect(try Data(contentsOf: destination) == payload)
-        #expect(reported.current.last == 1)
-        #expect(reported.current == reported.current.sorted())
+        let expected = Int64(payload.count)
+        #expect(reported.current.last == TransferProgress(bytesReceived: expected, bytesExpected: expected))
+        #expect(reported.current.map(\.bytesReceived) == reported.current.map(\.bytesReceived).sorted())
     }
 
     @Test func truncatedResponseFailsAndLeavesNothing() async throws {

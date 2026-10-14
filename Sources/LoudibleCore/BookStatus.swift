@@ -6,8 +6,9 @@ public enum BookStatus: Sendable, Equatable {
     case none
     /// Queued, or paused for sign-in.
     case queued(ExportJob.Kind)
-    /// `progress` is the job's overall completion (0...1).
-    case running(ExportJob.Kind, progress: Double)
+    /// `progress` is the job's overall completion (0...1); `transferred` is set while the audio
+    /// file is downloading.
+    case running(ExportJob.Kind, progress: Double, transferred: TransferProgress? = nil)
     /// The latest attempt failed. Kept in memory only; cleared when the next attempt starts.
     case failed(ExportJob.Kind, String)
     case downloaded
@@ -25,7 +26,7 @@ public enum BookStatus: Sendable, Equatable {
     ) -> BookStatus {
         let active = jobs.filter { $0.book.asin == asin && !$0.state.isFinished }
         if let job = active.first(where: { if case .running = $0.state { true } else { false } }) {
-            return .running(job.kind, progress: job.fractionCompleted)
+            return .running(job.kind, progress: job.fractionCompleted, transferred: job.transferred)
         }
         if let job = active.first {
             return .queued(job.kind)
@@ -61,8 +62,9 @@ public struct BookMenuItem: Sendable, Equatable, Identifiable {
     }
 }
 
-/// Which menu items a book offers. Items that don't apply are left out, except Export, which is
-/// disabled with a reason.
+/// Which menu items a book offers. Items that don't apply are left out, except Export of a
+/// downloaded book, which is disabled with a reason. Export of a book that is not downloaded yet
+/// downloads it first, so it is offered alongside Download.
 public enum BookMenu {
     public struct Context: Sendable, Equatable {
         public var isDownloaded: Bool
@@ -97,6 +99,8 @@ public enum BookMenu {
             let reason = exportBlocker(hasActiveJob: !active.isEmpty, context: context)
             items.append(BookMenuItem(.export, isEnabled: reason == nil, disabledReason: reason))
             items.append(BookMenuItem(.showDownload))
+        } else if context.isInLibrary && active.isEmpty {
+            items.append(BookMenuItem(.export))
         }
         if context.isExported {
             items.append(BookMenuItem(.showExport))

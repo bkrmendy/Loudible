@@ -27,7 +27,8 @@ struct ContentView: View {
                 )
             },
             toggle: { library.toggleSelection($0.asin) },
-            perform: perform
+            perform: perform,
+            clearSelection: { library.clearSelection() }
         )
         .searchable(
             text: $library.searchText, placement: .toolbarPrincipal,
@@ -39,6 +40,16 @@ struct ContentView: View {
         .overlay {
             if isSignedOutAndEmpty, model.session.hasRestored {
                 SignInPanel(session: model.session)
+            }
+        }
+        .background {
+            // Escape deselects. Only while something is selected, so otherwise Escape still
+            // reaches the search field.
+            if !library.selection.isEmpty {
+                Button("Deselect All") { library.clearSelection() }
+                    .keyboardShortcut(.cancelAction)
+                    .opacity(0)
+                    .accessibilityHidden(true)
             }
         }
         .toolbar { toolbar }
@@ -77,19 +88,33 @@ struct ContentView: View {
                 AccountButton(model: model)
             }
         }
-        ToolbarItem(placement: .primaryAction) {
-            if model.library.isLoading {
-                ProgressView().controlSize(.small)
-            } else if model.library.isCheckingMarketplaces {
-                ProgressView().controlSize(.small)
-                    .help("Checking other Audible marketplaces for more titles…")
-            } else {
-                Button("Refresh Library", systemImage: "arrow.clockwise") {
-                    Task { await model.refreshLibrary() }
-                }
-                .help("Refresh library")
-                .disabled(!model.library.canRefresh)
+        if !model.library.selectedBooks.isEmpty {
+            ToolbarItemGroup(placement: .primaryAction) {
+                SelectionActions(
+                    downloadCount: model.selectedBooks(offering: .download).count,
+                    exportCount: model.selectedBooks(offering: .export).count,
+                    perform: { action in Task { await model.performOnSelection(action) } }
+                )
             }
+        }
+        ToolbarItem(placement: .primaryAction) {
+            let isBusy = model.library.isLoading || model.library.isCheckingMarketplaces
+            // While busy the spinner stays inside the button, so it gets the button's round
+            // toolbar background instead of a narrow capsule of its own.
+            Button {
+                Task { await model.refreshLibrary() }
+            } label: {
+                if isBusy {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Label("Refresh Library", systemImage: "arrow.clockwise")
+                }
+            }
+            .help(
+                model.library.isCheckingMarketplaces && !model.library.isLoading
+                    ? "Checking other Audible marketplaces for more titles…" : "Refresh library"
+            )
+            .disabled(isBusy || !model.library.canRefresh)
         }
     }
 
@@ -103,6 +128,33 @@ struct ContentView: View {
             pendingDelete = book
         case .download, .cancel, .export:
             Task { await model.perform(action, on: book) }
+        }
+    }
+}
+
+/// Download and Export for the selected books, in the toolbar while something is selected. Each
+/// acts on the selected books whose menu offers it, and is disabled when none does.
+struct SelectionActions: View {
+    let downloadCount: Int
+    let exportCount: Int
+    let perform: (BookAction) -> Void
+
+    var body: some View {
+        Button("Download", systemImage: "arrow.down.circle") { perform(.download) }
+            .help(help(count: downloadCount, action: "Download", none: "downloaded"))
+            .disabled(downloadCount == 0)
+            .labelStyle(.titleAndIcon)
+        Button("Export", systemImage: "square.and.arrow.up") { perform(.export) }
+            .help(help(count: exportCount, action: "Export to M4B", none: "exported"))
+            .disabled(exportCount == 0)
+            .labelStyle(.titleAndIcon)
+    }
+
+    private func help(count: Int, action: String, none: String) -> String {
+        switch count {
+        case 0: "None of the selected books can be \(none)"
+        case 1: "\(action) 1 book"
+        default: "\(action) \(count) books"
         }
     }
 }
@@ -147,6 +199,7 @@ private extension View {
 #if DEBUG
 #Preview("Window – signed out") { PreviewCatalog.view(.windowSignedOut) }
 #Preview("Window – library") { PreviewCatalog.view(.windowLibrary) }
+#Preview("Window – selection") { PreviewCatalog.view(.windowSelection) }
 #Preview("Window – loading") { PreviewCatalog.view(.windowLoading) }
 #Preview("Window – load failed") { PreviewCatalog.view(.windowLoadFailed) }
 #endif

@@ -358,7 +358,7 @@ public actor ExportQueue {
 
         update(id, to: .running(.downloading, progress: 0))
         try await perform {
-            try await self.downloader.download(from: license.downloadURL, to: partial, progress: self.progressHandler(id, .downloading))
+            try await self.downloader.download(from: license.downloadURL, to: partial, progress: self.downloadProgressHandler(id))
         }
         try checkCancellation()
 
@@ -417,23 +417,29 @@ public actor ExportQueue {
         }
     }
 
-    private func reportProgress(_ id: UUID, _ phase: ExportJob.Phase, _ progress: Double) {
+    private nonisolated func downloadProgressHandler(_ id: UUID) -> @Sendable (TransferProgress) -> Void {
+        { [weak self] transferred in
+            Task { await self?.reportProgress(id, .downloading, transferred.fraction, transferred: transferred) }
+        }
+    }
+
+    private func reportProgress(_ id: UUID, _ phase: ExportJob.Phase, _ progress: Double, transferred: TransferProgress? = nil) {
         guard let index = index(of: id),
               case .running(let currentPhase, let current) = snapshot.jobs[index].state,
               currentPhase == phase,
               progress >= 1 || progress - current >= 0.005
         else { return }
-        update(id, to: .running(phase, progress: min(max(progress, 0), 1)))
+        update(id, to: .running(phase, progress: min(max(progress, 0), 1)), transferred: transferred)
     }
 
     private func index(of id: UUID) -> Int? {
         snapshot.jobs.firstIndex { $0.id == id }
     }
 
-    private func update(_ id: UUID, to state: ExportJob.State) {
+    private func update(_ id: UUID, to state: ExportJob.State, transferred: TransferProgress? = nil) {
         guard let index = index(of: id) else { return }
         // Late or out-of-order progress reports are invalid transitions and simply dropped.
-        try? snapshot.jobs[index].transition(to: state)
+        try? snapshot.jobs[index].transition(to: state, transferred: transferred)
     }
 
     // MARK: Authentication pause

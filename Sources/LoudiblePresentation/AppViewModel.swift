@@ -152,6 +152,29 @@ public final class AppViewModel {
         }
     }
 
+    // MARK: Selection
+
+    /// The selected books whose menu offers `action` enabled, i.e. the ones the toolbar's
+    /// Download or Export button acts on.
+    public func selectedBooks(offering action: BookAction) -> [Audiobook] {
+        library.selectedBooks.filter { book in
+            menuItems(for: book).contains { $0.action == action && $0.isEnabled }
+        }
+    }
+
+    /// Downloads or exports the selected books that offer it, as their menus would, then clears
+    /// the selection.
+    public func performOnSelection(_ action: BookAction) async {
+        let books = selectedBooks(offering: action)
+        guard !books.isEmpty else { return }
+        switch action {
+        case .download: await export.download(books)
+        case .export: await export.export(books)
+        default: return
+        }
+        library.clearSelection()
+    }
+
     /// Moves the book's audio file to the Trash and deletes its manifest; the M4B is kept.
     public func deleteDownload(_ book: Audiobook) async {
         let downloads = self.downloads

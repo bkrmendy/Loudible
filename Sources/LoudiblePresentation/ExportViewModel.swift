@@ -77,7 +77,12 @@ public final class ExportViewModel {
 
     /// Exports one book, whatever else is running.
     public func exportOne(_ book: Audiobook) async {
-        await enqueue([book], kind: .export)
+        await export([book])
+    }
+
+    /// Exports books to M4B, downloading the ones not downloaded yet.
+    public func export(_ books: [Audiobook]) async {
+        await enqueue(books, kind: .export)
     }
 
     /// Downloads books and keeps the encrypted files.

@@ -23,7 +23,7 @@ enum PreviewState: String, CaseIterable, Sendable {
     // LoginSheet.swift
     case loginIdle, loginRegistering, loginError, loginPastedURL
     // ContentView.swift
-    case windowSignedOut, windowLibrary, windowLoading, windowLoadFailed
+    case windowSignedOut, windowLibrary, windowSelection, windowLoading, windowLoadFailed
 }
 
 /// The view and size of each `PreviewState`.
@@ -47,7 +47,7 @@ enum PreviewCatalog {
             CGSize(width: 900, height: 560)
         case .messagesNone, .messagesOne, .messagesSeveral, .messagesNotice: CGSize(width: 700, height: 110)
         case .loginIdle, .loginRegistering, .loginError, .loginPastedURL: CGSize(width: 520, height: 760)
-        case .windowSignedOut, .windowLibrary, .windowLoading, .windowLoadFailed: windowSize
+        case .windowSignedOut, .windowLibrary, .windowSelection, .windowLoading, .windowLoadFailed: windowSize
         }
     }
 
@@ -93,7 +93,7 @@ enum PreviewCatalog {
         case .tileNotInLibrary: return tile(books[1], PreviewData.tileState(isInLibrary: false, status: .downloaded))
         case .tileOtherMarketplace: return tile(books[3], BookTileState(marketplaceBadge: "UK", status: .downloaded))
         case .tileQueued: return tile(books[1], PreviewData.tileState(status: .queued(.download)))
-        case .tileDownloading: return tile(books[1], PreviewData.tileState(status: .running(.download, progress: 0.4)))
+        case .tileDownloading: return tile(books[1], PreviewData.tileState(status: .running(.download, progress: 0.4, transferred: TransferProgress(bytesReceived: 132_000_000, bytesExpected: 288_000_000))))
         case .tileExporting: return tile(books[1], PreviewData.tileState(status: .running(.export, progress: 0.7)))
         case .tileFailed: return tile(books[1], PreviewData.tileState(status: .failed(.download, "HTTP 403: Forbidden")))
         case .tileDownloaded: return tile(books[1], PreviewData.tileState(status: .downloaded))
@@ -125,6 +125,7 @@ enum PreviewCatalog {
 
         case .windowSignedOut: return window(.preview(signedIn: false))
         case .windowLibrary: return window(.preview())
+        case .windowSelection: return window(.preview(), selecting: [books[0].asin, books[4].asin])
         case .windowLoading: return window(.preview(library: .loading))
         case .windowLoadFailed: return window(.preview(library: .failing("Audible returned HTTP 500 (Internal Server Error).")))
         }
@@ -212,8 +213,11 @@ enum PreviewCatalog {
     }
 
     /// The whole window, as `LoudibleApp` shows it.
-    private static func window(_ model: AppViewModel) -> AnyView {
-        AnyView(ContentView(model: model).task { await model.start() })
+    private static func window(_ model: AppViewModel, selecting asins: Set<String> = []) -> AnyView {
+        AnyView(ContentView(model: model).task {
+            await model.start()
+            model.library.setSelection(asins)
+        })
     }
 }
 
@@ -278,7 +282,7 @@ enum PreviewData {
     /// A tile with the menu that goes with its status.
     static func tileState(isInLibrary: Bool = true, status: BookStatus) -> BookTileState {
         let items: [BookMenuItem] = switch status {
-        case .queued(let kind), .running(let kind, _): [BookMenuItem(.cancel(jobID: UUID(), kind: kind))]
+        case .queued(let kind), .running(let kind, _, _): [BookMenuItem(.cancel(jobID: UUID(), kind: kind))]
         case .downloaded, .exported: [BookMenuItem(.export), BookMenuItem(.showDownload), BookMenuItem(.deleteDownload)]
         case .none, .failed: [BookMenuItem(.download)]
         }
@@ -388,7 +392,7 @@ private struct PreviewCredentialStore: CredentialStore {
 }
 
 private struct PreviewDownloader: FileDownloader {
-    func download(from url: URL, to destination: URL, progress: @escaping @Sendable (Double) -> Void) async throws {
+    func download(from url: URL, to destination: URL, progress: @escaping @Sendable (TransferProgress) -> Void) async throws {
         throw ExporterError.download("Previews cannot download.")
     }
 }

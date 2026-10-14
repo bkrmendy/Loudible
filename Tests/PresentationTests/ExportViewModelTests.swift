@@ -195,10 +195,12 @@ import TestSupport
         downloader.handler.withLock { $0 = { _, destination in await gate.wait(); try Data().write(to: destination) } }
         let (app, queue) = try await makeApp()
         let book = app.library.books[0]
-        #expect(app.menuItems(for: book).map(\.action) == [.download])
+        #expect(app.menuItems(for: book).map(\.action) == [.download, .export])
 
         await app.perform(.download, on: book)
-        try await waitUntil { await app.status(for: book) == .running(.download, progress: 0.5 * 0.96 + 0.02) }
+        try await waitUntil { await app.status(for: book) == .running(
+            .download, progress: 0.5 * 0.96 + 0.02, transferred: TransferProgress(bytesReceived: 50, bytesExpected: 100)
+        ) }
         guard case .cancel(_, .download) = app.menuItems(for: book).first?.action else {
             Issue.record("expected Cancel Download"); return
         }
@@ -208,6 +210,24 @@ import TestSupport
         // Finishing a job triggers a rescan.
         try await waitUntil { await app.status(for: book) == .downloaded }
         #expect(app.menuItems(for: book).map(\.action) == [.export, .showDownload, .deleteDownload])
+    }
+
+    @Test func selectionButtonsActOnBooksThatOfferTheAction() async throws {
+        defer { work.cleanUp() }
+        try keepDownload(Fixtures.book("B1", title: "Book B1"))
+        let (app, queue) = try await makeApp()
+        let (downloaded, notDownloaded) = (app.library.books[0], app.library.books[1])
+        app.library.setSelection(["B1", "B2"])
+        #expect(app.selectedBooks(offering: .download) == [notDownloaded])
+        #expect(app.selectedBooks(offering: .export) == [downloaded, notDownloaded])
+
+        await app.performOnSelection(.export)
+        #expect(app.library.selection.isEmpty)
+        await queue.waitUntilFinished()
+        try await waitUntil { await app.status(for: downloaded) == .exported }
+        try await waitUntil { await app.status(for: notDownloaded) == .exported }
+        // Exporting a book that was not downloaded keeps the download.
+        #expect(app.downloadedFiles["B2"] != nil)
     }
 
     @Test func downloadAndExportRunTogether() async throws {
@@ -240,7 +260,7 @@ import TestSupport
         try await waitUntil { await !app.export.isRunning }
         #expect(app.status(for: book) == .failed(.download, "The download license was denied: not owned"))
         // Download doubles as Retry.
-        #expect(app.menuItems(for: book).map(\.action) == [.download])
+        #expect(app.menuItems(for: book).map(\.action) == [.download, .export])
 
         api.licenseHandler.withLock { $0 = { asin, _ in Fixtures.license(asin: asin) } }
         await app.export.download([book])
@@ -259,7 +279,7 @@ import TestSupport
         #expect(app.downloadedFiles["B1"] == nil)
         #expect(app.exportedFiles["B1"] != nil)
         #expect(downloads.manifest(for: "B1") == nil)
-        #expect(app.menuItems(for: app.library.books[0]).map(\.action) == [.download, .showExport])
+        #expect(app.menuItems(for: app.library.books[0]).map(\.action) == [.download, .export, .showExport])
     }
 
     @Test func signOutCancelsJobsAndKeepsFinishedFiles() async throws {

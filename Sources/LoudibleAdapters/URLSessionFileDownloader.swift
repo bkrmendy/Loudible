@@ -13,7 +13,7 @@ public struct URLSessionFileDownloader: FileDownloader {
     public func download(
         from url: URL,
         to destination: URL,
-        progress: @escaping @Sendable (Double) -> Void
+        progress: @escaping @Sendable (TransferProgress) -> Void
     ) async throws {
         try Task.checkCancellation()
         let delegate = DownloadDelegate(destination: destination, progress: progress)
@@ -38,14 +38,14 @@ public struct URLSessionFileDownloader: FileDownloader {
 
 private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     private let destination: URL
-    private let progress: @Sendable (Double) -> Void
+    private let progress: @Sendable (TransferProgress) -> Void
     private let lock = NSLock()
     private var task: URLSessionDownloadTask?
     private var continuation: CheckedContinuation<Void, any Error>?
     private var finishError: (any Error)?
     private var isCancelled = false
 
-    init(destination: URL, progress: @escaping @Sendable (Double) -> Void) {
+    init(destination: URL, progress: @escaping @Sendable (TransferProgress) -> Void) {
         self.destination = destination
         self.progress = progress
     }
@@ -69,7 +69,7 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unc
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData _: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         guard totalBytesExpectedToWrite > 0 else { return }
-        progress(min(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite), 1))
+        progress(TransferProgress(bytesReceived: totalBytesWritten, bytesExpected: totalBytesExpectedToWrite))
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
@@ -111,7 +111,7 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unc
         } else if let finishError {
             continuation?.resume(throwing: finishError)
         } else {
-            progress(1)
+            progress(TransferProgress(bytesReceived: task.countOfBytesReceived, bytesExpected: task.countOfBytesReceived))
             continuation?.resume()
         }
     }
