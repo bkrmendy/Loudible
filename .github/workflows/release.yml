@@ -1,6 +1,10 @@
 # Builds, tests and verifies Loudible.app for every version tag (v1.2.3, v1.2.3-beta.1)
 # and publishes it as a GitHub release. Tags with a pre-release suffix become pre-releases.
 #
+# It can also be run by hand (Actions → Release → Run workflow). Name an existing tag to build and
+# release that tag's code; leave the tag empty to build the chosen branch and attach the result
+# to the run as an artifact, without a release.
+#
 # Next to the app the release carries the FFmpeg source tarball and Scripts/build-ffmpeg.sh,
 # which the bundled LGPL notices promise (see "Releasing" in README.md).
 name: Release
@@ -9,12 +13,18 @@ on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release, like v1.2.3. Empty: build the branch without releasing."
+        type: string
+        required: false
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -23,9 +33,21 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 60
     env:
-      TAG: ${{ github.ref_name }}
+      # Empty for a manual run without a tag: nothing is released then.
+      TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
     steps:
+      - name: Check tag
+        if: env.TAG != ''
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+              echo "::error::'$TAG' is not a version tag like v1.2.3"
+              exit 1
+          fi
+
       - uses: actions/checkout@v5
+        with:
+          # A manual run with a tag builds that tag, not the branch it was started from.
+          ref: ${{ env.TAG && format('refs/tags/{0}', env.TAG) || '' }}
 
       - name: Select Xcode 27
         run: |
@@ -52,6 +74,7 @@ jobs:
         run: Scripts/test.sh
 
       - name: Build app
+        # Without a tag the app keeps the Xcode project's version.
         run: APP_VERSION="${TAG#v}" Scripts/build-app.sh
 
       - name: Verify app
@@ -61,13 +84,23 @@ jobs:
         run: |
           source Scripts/ffmpeg-version.sh
           mkdir -p dist
-          ditto -c -k --sequesterRsrc --keepParent build/Loudible.app "dist/Loudible-$TAG-arm64.zip"
+          name="${TAG:-$(git rev-parse --short HEAD)}"
+          ditto -c -k --sequesterRsrc --keepParent build/Loudible.app "dist/Loudible-$name-arm64.zip"
           cp "Vendor/downloads/ffmpeg-$FFMPEG_VERSION.tar.xz" dist/
           cp Scripts/build-ffmpeg.sh dist/
           (cd dist && shasum -a 256 * > SHA256SUMS.txt)
           cat dist/SHA256SUMS.txt
 
+      - name: Upload build
+        if: env.TAG == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: Loudible-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+
       - name: Publish release
+        if: env.TAG != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

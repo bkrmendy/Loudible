@@ -1,85 +1,46 @@
-# Loudible (native macOS)
+<p align="center">
+  <img src="docs/icon.png" width="128" height="128" alt="Loudible app icon">
+</p>
 
-A small SwiftUI app that signs in to Audible, lists the audiobooks you bought, and exports the
-selected ones to M4B files. It is independent of Libation: it does not use or change Libation's
-settings, database, or folders.
+<h1 align="center">Loudible</h1>
 
-## Requirements
+<p align="center">
+  Export the Audible audiobooks you own to plain M4B files, on your Mac.
+</p>
 
-- Apple Silicon Mac and Xcode 27 in `/Applications` (the Command Line Tools alone are not
-  enough: SwiftUI previews need Xcode's macro plugins). Homebrew is not needed.
-- FFmpeg is built from source by `Scripts/build-ffmpeg.sh`, which `test.sh` and `build-app.sh`
-  run for you. It downloads the release pinned in `Scripts/ffmpeg-version.sh`, checks its SHA-256,
-  and installs a minimal LGPL build into `Vendor/` (about a minute, done once).
+<p align="center">
+  <a href="https://github.com/bkrmendy/Loudible/releases/latest"><img src="https://img.shields.io/github/v/release/bkrmendy/Loudible?include_prereleases" alt="Latest release"></a>
+  <a href="https://github.com/bkrmendy/Loudible/releases"><img src="https://img.shields.io/github/downloads/bkrmendy/Loudible/total" alt="Downloads"></a>
+  <a href="https://github.com/bkrmendy/Loudible/actions/workflows/release.yml"><img src="https://github.com/bkrmendy/Loudible/actions/workflows/release.yml/badge.svg" alt="Release build"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-blue?logo=apple" alt="macOS 14 or later">
+  <img src="https://img.shields.io/badge/Apple%20Silicon-arm64-lightgrey" alt="Apple Silicon">
+  <img src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white" alt="Swift 6">
+</p>
 
-The code is a Swift package. `App/Loudible.xcodeproj` wraps it in an app target: open it,
-press ⌘R to run, and use the canvas to see every view state as a preview. Build FFmpeg once first:
+A small native SwiftUI app that signs in to Audible, lists the audiobooks you bought, and exports
+the selected ones to M4B files. It is independent of [Libation](https://github.com/rmcrackan/Libation):
+it does not use or change Libation's settings, database, or folders.
 
-```sh
-cd NativeMac
-Scripts/build-ffmpeg.sh
-open App/Loudible.xcodeproj
-```
+## Features
 
-From the terminal, source `Scripts/env.sh` before `swift` commands; it selects Xcode's toolchain
-and checks the FFmpeg build:
+- **Lossless export.** The audio is not re-encoded; chapters, metadata, and cover art are kept.
+- **Works offline after download.** Decryption keys are saved with each download, so exporting
+  needs no network.
+- **Parallel jobs.** Up to three books are downloaded or exported at once, with progress on
+  each cover.
+- **Stays in sync with Finder.** Files you rename, move, or delete are picked up automatically.
+- **Private by design.** Credentials live in the macOS Keychain; key material is stored with
+  mode 0600 outside your Documents folder.
+- **Small.** About 3.5 MB, with a minimal LGPL build of FFmpeg bundled.
 
-```sh
-source Scripts/env.sh
-swift build
-```
+## Install
 
-## Test
+Download `Loudible-<version>-arm64.zip` from the
+[latest release](https://github.com/bkrmendy/Loudible/releases/latest) and unzip it. Requires an
+Apple Silicon Mac with macOS 14 or later.
 
-```sh
-Scripts/test.sh                       # everything
-Scripts/test.sh --filter ExportQueue  # a subset
-```
-
-`test.sh` is the only test command. It:
-
-1. Checks that Core and Presentation do not import SwiftUI, WebKit, or AppKit.
-2. Builds the package and the tests.
-3. Runs the tests in a `sandbox-exec` profile that blocks every non-loopback connection, with a
-   timeout on each step (`TEST_TIMEOUT`, default 900 s).
-
-The tests never contact Audible. They use mocks for `AudibleAPI`, the HTTP transport, and
-Keychain. Download tests use a local HTTP server on 127.0.0.1. All fixtures are synthetic.
-
-## Build and run the app
-
-```sh
-Scripts/build-app.sh     # builds the Xcode project into build/Loudible.app (ad-hoc signed)
-Scripts/verify-app.sh    # checks ARM64, signatures, bundled libraries, and that FFmpeg loads
-open build/Loudible.app
-```
-
-For development you can also run `source Scripts/env.sh && swift run Loudible`.
-
-The app runs on macOS 14 or newer. `build-app.sh` copies the three FFmpeg libraries
-(libavformat, libavcodec, libavutil) into `Contents/Frameworks`, rewrites their install names
-to `@rpath`, and signs everything ad hoc. The result is about 3.5 MB.
-
-### FFmpeg licensing
-
-FFmpeg is built without `--enable-gpl`, `--enable-version3`, or `--enable-nonfree`, so it is
-LGPL-2.1-or-later. `build-ffmpeg.sh` refuses any configuration that would change that, and
-`--self-test` checks the license at runtime. The app ships:
-
-- `Contents/Resources/THIRD_PARTY_NOTICES.txt`: version, configure line, and source URL with
-  its SHA-256.
-- `Contents/Resources/Licenses/FFmpeg/`: the LGPL text.
-- `Contents/Resources/Credits.html`: the FFmpeg credit shown in the About window.
-
-FFmpeg stays in separate dynamic libraries, so users can replace them.
-
-### Releasing
-
-With every release, publish the FFmpeg source tarball named in `Scripts/ffmpeg-version.sh`
-(`Vendor/downloads/` holds the verified copy) and `Scripts/build-ffmpeg.sh` next to the app
-download. The notices promise this.
-
-To upgrade FFmpeg, follow the steps at the top of `Scripts/ffmpeg-version.sh`.
+The app is ad-hoc signed, not notarized. The first time, open it once, then allow it under
+**System Settings → Privacy & Security → Open Anyway**.
 
 ## Using the app
 
@@ -116,7 +77,99 @@ as `<ASIN>.json` and `<ASIN>.cover` (mode 0600) in
 `~/Library/Application Support/<bundle id>/Downloads`, not next to the audio, because they are
 key material.
 
-## Layout
+## Disclaimer
+
+Loudible is for making personal copies of audiobooks you have bought. It is not affiliated with,
+endorsed by, or connected to Audible or Amazon. Respect the laws and terms that apply where you
+live.
+
+## Acknowledgements
+
+- [Libation](https://github.com/rmcrackan/Libation) and the
+  [`audible`](https://github.com/mkb79/Audible) Python package, whose work documents the Audible
+  protocol this app follows.
+- [FFmpeg](https://ffmpeg.org), which does the decryption and remuxing (LGPL-2.1-or-later).
+
+## Development
+
+### Requirements
+
+- Apple Silicon Mac and Xcode 27 in `/Applications` (the Command Line Tools alone are not
+  enough: SwiftUI previews need Xcode's macro plugins). Homebrew is not needed.
+- FFmpeg is built from source by `Scripts/build-ffmpeg.sh`, which `test.sh` and `build-app.sh`
+  run for you. It downloads the release pinned in `Scripts/ffmpeg-version.sh`, checks its SHA-256,
+  and installs a minimal LGPL build into `Vendor/` (about a minute, done once).
+
+The code is a Swift package. `App/Loudible.xcodeproj` wraps it in an app target: open it,
+press ⌘R to run, and use the canvas to see every view state as a preview. Build FFmpeg once first:
+
+```sh
+cd NativeMac
+Scripts/build-ffmpeg.sh
+open App/Loudible.xcodeproj
+```
+
+From the terminal, source `Scripts/env.sh` before `swift` commands; it selects Xcode's toolchain
+and checks the FFmpeg build:
+
+```sh
+source Scripts/env.sh
+swift build
+```
+
+### Test
+
+```sh
+Scripts/test.sh                       # everything
+Scripts/test.sh --filter ExportQueue  # a subset
+```
+
+`test.sh` is the only test command. It:
+
+1. Checks that Core and Presentation do not import SwiftUI, WebKit, or AppKit.
+2. Builds the package and the tests.
+3. Runs the tests in a `sandbox-exec` profile that blocks every non-loopback connection, with a
+   timeout on each step (`TEST_TIMEOUT`, default 900 s).
+
+The tests never contact Audible. They use mocks for `AudibleAPI`, the HTTP transport, and
+Keychain. Download tests use a local HTTP server on 127.0.0.1. All fixtures are synthetic.
+
+### Build and run the app
+
+```sh
+Scripts/build-app.sh     # builds the Xcode project into build/Loudible.app (ad-hoc signed)
+Scripts/verify-app.sh    # checks ARM64, signatures, bundled libraries, and that FFmpeg loads
+open build/Loudible.app
+```
+
+For development you can also run `source Scripts/env.sh && swift run Loudible`.
+
+The app runs on macOS 14 or newer. `build-app.sh` copies the three FFmpeg libraries
+(libavformat, libavcodec, libavutil) into `Contents/Frameworks`, rewrites their install names
+to `@rpath`, and signs everything ad hoc. The result is about 3.5 MB.
+
+#### FFmpeg licensing
+
+FFmpeg is built without `--enable-gpl`, `--enable-version3`, or `--enable-nonfree`, so it is
+LGPL-2.1-or-later. `build-ffmpeg.sh` refuses any configuration that would change that, and
+`--self-test` checks the license at runtime. The app ships:
+
+- `Contents/Resources/THIRD_PARTY_NOTICES.txt`: version, configure line, and source URL with
+  its SHA-256.
+- `Contents/Resources/Licenses/FFmpeg/`: the LGPL text.
+- `Contents/Resources/Credits.html`: the FFmpeg credit shown in the About window.
+
+FFmpeg stays in separate dynamic libraries, so users can replace them.
+
+#### Releasing
+
+With every release, publish the FFmpeg source tarball named in `Scripts/ffmpeg-version.sh`
+(`Vendor/downloads/` holds the verified copy) and `Scripts/build-ffmpeg.sh` next to the app
+download. The notices promise this.
+
+To upgrade FFmpeg, follow the steps at the top of `Scripts/ffmpeg-version.sh`.
+
+### Layout
 
 | Target | Role |
 | --- | --- |
@@ -127,7 +180,7 @@ key material.
 | `LoudibleApp` | SwiftUI window, WKWebView login, folder picker, previews. No business logic. |
 | `Loudible`, `App/Loudible.xcodeproj` | Launchers for `swift run` and Xcode. |
 
-## Not verified automatically
+### Not verified automatically
 
 - Live Audible sign-in, library, license, and download requests have not been run against a
   real account. The request formats follow the Audible for iPhone protocol, as used by Libation
