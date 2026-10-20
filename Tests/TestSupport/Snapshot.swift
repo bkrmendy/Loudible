@@ -3,7 +3,7 @@ import Foundation
 import SwiftUI
 @testable import LoudibleApp
 
-/// Renders every `PreviewState` (the states the `#Preview`s show) into one PNG each.
+/// Renders the examples declared beside each view into PNGs, without launching Loudible.
 ///
 /// SwiftUI controls on macOS are AppKit views that only draw inside a window, so each state gets
 /// a real window. The window is never shown: its captures match a visible window's byte for byte.
@@ -15,34 +15,67 @@ public enum Snapshot {
     /// Returns the files written.
     @discardableResult
     public static func run(to folder: URL, states names: Set<String>? = nil) async throws -> [URL] {
-        if let names {
-            let unknown = names.subtracting(PreviewState.allCases.map(\.rawValue))
-            guard unknown.isEmpty else { throw UnknownStates(names: unknown.sorted()) }
-        }
+        let previews = try selected(states: names)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-
         var written: [URL] = []
-        for state in PreviewState.allCases where names?.contains(state.rawValue) ?? true {
-            let url = folder.appendingPathComponent("\(state.rawValue).png")
-            try await render(state).write(to: url)
+        for preview in previews {
+            let url = folder.appendingPathComponent("\(preview.id).png")
+            try await render(preview).write(to: url, options: .atomic)
             written.append(url)
         }
         return written
     }
 
-    public struct UnknownStates: Error, CustomStringConvertible {
-        public let names: [String]
-        public var description: String {
-            """
-            Unknown preview states: \(names.joined(separator: ", ")). Valid: \
-            \(PreviewState.allCases.map(\.rawValue).joined(separator: ", "))
-            """
+    /// Generates one HTML gallery and an images folder per Swift file, beside its source by default.
+    public static func galleries(to root: URL? = nil, file: String? = nil, states: Set<String>? = nil) async throws {
+        let previews = try selected(file: file, states: states)
+        let groups = Dictionary(grouping: previews, by: \.source)
+        for source in groups.keys.sorted(by: { $0.path < $1.path }) {
+            let examples = groups[source]!
+            let folder = PreviewGallery.folder(for: source, root: root)
+            let images = folder.appendingPathComponent("images", isDirectory: true)
+            try FileManager.default.createDirectory(at: images, withIntermediateDirectories: true)
+            for preview in examples {
+                let image = images.appendingPathComponent("\(preview.id).png")
+                try await render(preview).write(to: image, options: .atomic)
+                print("Rendered \(image.path)")
+            }
+            let html = folder.appendingPathComponent("\(source.deletingPathExtension().lastPathComponent)Preview.html")
+            try PreviewGallery.html(source: source, previews: examples)
+                .write(to: html, atomically: true, encoding: .utf8)
+            print("Gallery: \(html.path)")
         }
     }
 
-    private static func render(_ state: PreviewState) async throws -> Data {
-        let size = PreviewCatalog.size(state)
-        let isWindow = state.rawValue.hasPrefix("window")
+    /// Lists registered examples without creating windows or writing files.
+    public static func list() {
+        for preview in ViewPreviews.all {
+            print("\(preview.source.lastPathComponent)\t\(preview.id)\t\(preview.title)")
+        }
+    }
+
+    static func selected(file: String? = nil, states: Set<String>? = nil) throws -> [ViewPreview] {
+        let previews = ViewPreviews.all.filter { file == nil || $0.source.lastPathComponent == file }
+        guard !previews.isEmpty else { throw SelectionError(message: "Unknown preview file: \(file ?? "")") }
+        if let states {
+            let unknown = states.subtracting(previews.map(\.id))
+            guard unknown.isEmpty else {
+                throw SelectionError(message: "Unknown preview states: \(unknown.sorted().joined(separator: ", "))")
+            }
+        }
+        let selected = previews.filter { states?.contains($0.id) ?? true }
+        guard !selected.isEmpty else { throw SelectionError(message: "No preview states selected") }
+        return selected
+    }
+
+    private struct SelectionError: Error, CustomStringConvertible {
+        let message: String
+        var description: String { message }
+    }
+
+    private static func render(_ preview: ViewPreview) async throws -> Data {
+        let size = preview.size
+        let isWindow = preview.windowChrome
         // Whole-window states get the real window chrome and toolbar; components a plain window.
         let style: NSWindow.StyleMask = isWindow ? [.titled, .closable, .resizable, .fullSizeContentView] : [.titled]
         let window = NSWindow(
@@ -53,7 +86,7 @@ public enum Snapshot {
         // Closing must not release the window a second time; Swift owns it.
         window.isReleasedWhenClosed = false
         window.title = "Loudible"
-        window.contentView = NSHostingView(rootView: PreviewCatalog.view(state))
+        window.contentView = NSHostingView(rootView: preview.content())
         defer { window.close() }
 
         let view = isWindow ? window.contentView!.superview! : window.contentView!

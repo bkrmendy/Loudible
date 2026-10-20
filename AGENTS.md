@@ -76,6 +76,12 @@ After building a feature of fixing a bug, always run
 
 Fix any issues these commands surface.
 
+After any UI change (including layout, styling, view states, or preview data), always run
+`Scripts/render-previews.sh --all` before handing off or committing. Inspect the affected HTML
+galleries and include the regenerated HTML and PNG files with the change. Filtered renders and
+`--output` scratch renders are useful while iterating, but do not replace regenerating all
+source-local galleries for the final change.
+
 ## Architecture and layering (enforced)
 
 | Target | May use |
@@ -114,12 +120,30 @@ Core or Presentation behind a protocol, implement it in an adapter, and wire it 
 
 ## Looking at the UI
 
-1. **Previews.** Open `App/Loudible.xcodeproj`; every view file ends with `#Preview`s,
-   one per state. Each is one line, `PreviewCatalog.view(.someState)` : the states, their sizes
-   and their sample data live in `Sources/LoudibleApp/PreviewData.swift` ( `#if DEBUG` , 
-   synthetic data, in-memory fakes, logins on `.invalid` hosts, so nothing contacts Amazon). To
-   add a state, add a `PreviewState` case, its size and view in `PreviewCatalog` , and a
-`#Preview` line in the view's file. Whole-window states use `AppViewModel.preview(…)` .
+1. **Static preview galleries.** View files end with `#if DEBUG` extensions of `ViewPreviews`
+   containing named `ViewPreview` definitions. These construct content views directly; whole-window
+   examples use `AppViewModel.preview(…)` and call `start()` in `.task`. Synthetic data and in-memory
+   fakes live in `Sources/LoudibleApp/PreviewData.swift` (offline). Each definition records its source
+   with `#filePath`, its size and whether to include window chrome. Register new file arrays in
+   `ViewPreviews.all`; do not duplicate scenarios in a separate catalog or add `#Preview` blocks.
+
+   ```sh
+   Scripts/render-previews.sh --all
+   Scripts/render-previews.sh --file BookTile.swift
+   Scripts/render-previews.sh --state tileSelected,tileDownloading
+   Scripts/render-previews.sh --all --output /private/tmp/loudible-previews
+   Scripts/render-previews.sh --list
+   ```
+
+   By default, a source-local `BookTile-Previews/` folder contains `BookTilePreview.html` and
+   `images/<state>.png`. Generated galleries are tracked in git and excluded from the package. A filtered
+   run replaces the gallery with only the selected states. HTML uses relative links and no external
+   assets. Rendering uses the sandboxed test host and invisible AppKit windows, without launching
+   Loudible or displaying a window. A logged-in macOS graphical session is required.
+   Keep the source-local HTML and PNGs in version control alongside the Swift views; do not add
+   these folders to `.gitignore`. Always regenerate all galleries after UI changes as described
+   under Feature development, and inspect the affected states. Rendering checks that the views
+   can be captured; it does not assert visual correctness or UI behaviour.
 2. **Snapshots, without Xcode.**
    
 
@@ -128,7 +152,7 @@ Core or Presentation behind a protocol, implement it in an adapter, and wire it 
    SNAPSHOT_STATES=tileSelected,windowLibrary SNAPSHOT_PATH=/abs/dir Scripts/test.sh --filter Snapshot
    ```
 
-   writes `<state>.png` for every `PreviewState` (about 25 s for all) into that folder. Use a
+   writes `<state>.png` for every registered preview into that folder. Use a
    scratch directory, not the repo. The window is never shown on screen (its capture is
    byte-identical to a visible one), but it needs a logged-in macOS session. Popovers and sheets
    are rendered as their content views in a plain window. The harness is

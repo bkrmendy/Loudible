@@ -47,14 +47,14 @@ struct LoginSheetContent<Browser: View>: View {
 
     init(
         marketplaceName: String,
-        isRegistering: Bool,
-        pastedURL: Binding<String>,
-        canSubmitPastedURL: Bool,
-        errorMessage: String?,
+        isRegistering: Bool = false,
+        pastedURL: Binding<String> = .constant(""),
+        canSubmitPastedURL: Bool = false,
+        errorMessage: String? = nil,
         showsBrowserFallback: Bool = false,
-        openInBrowser: @escaping () -> Void,
-        submitPastedURL: @escaping () -> Void,
-        cancel: @escaping () -> Void,
+        openInBrowser: @escaping () -> Void = {},
+        submitPastedURL: @escaping () -> Void = {},
+        cancel: @escaping () -> Void = {},
         @ViewBuilder browser: @escaping () -> Browser
     ) {
         self.marketplaceName = marketplaceName
@@ -198,8 +198,45 @@ struct LoginWebView: NSViewRepresentable {
 }
 
 #if DEBUG
-#Preview("Sign-in – idle") { PreviewCatalog.view(.loginIdle) }
-#Preview("Sign-in – registering") { PreviewCatalog.view(.loginRegistering) }
-#Preview("Sign-in – error") { PreviewCatalog.view(.loginError) }
-#Preview("Sign-in – pasted URL") { PreviewCatalog.view(.loginPastedURL) }
+extension ViewPreviews {
+    static var login: [ViewPreview] {
+        [
+            ViewPreview("loginIdle", "Sign-in – idle", width: 520, height: 760) {
+                LoginSheetContent(marketplaceName: Marketplace.us.name) {
+                    ZStack {
+                        Rectangle().fill(.quaternary)
+                        Label("Amazon sign-in page", systemImage: "globe").foregroundStyle(.secondary)
+                    }
+                }
+            },
+            ViewPreview("loginRegistering", "Sign-in – registering", width: 520, height: 760) {
+                LoginSheetContent(marketplaceName: Marketplace.us.name, isRegistering: true) {
+                    ZStack {
+                        Rectangle().fill(.quaternary)
+                        Label("Amazon sign-in page", systemImage: "globe").foregroundStyle(.secondary)
+                    }
+                }
+            },
+            ViewPreview("loginError", "Sign-in – error", width: 520, height: 760) {
+                LoginSheetContent(marketplaceName: Marketplace.us.name,
+                    errorMessage: ExporterError.loginCallback(.expired).localizedDescription) {
+                    ZStack {
+                        Rectangle().fill(.quaternary)
+                        Label("Amazon sign-in page", systemImage: "globe").foregroundStyle(.secondary)
+                    }
+                }
+            },
+            ViewPreview("loginPastedURL", "Sign-in – pasted URL", width: 520, height: 760) {
+                LoginSheetContent(marketplaceName: Marketplace.us.name,
+                    pastedURL: .constant("https://www.amazon.com/ap/maplanding?openid.oa2.authorization_code=PREVIEW"),
+                    canSubmitPastedURL: true, showsBrowserFallback: true) {
+                    ZStack {
+                        Rectangle().fill(.quaternary)
+                        Label("Amazon sign-in page", systemImage: "globe").foregroundStyle(.secondary)
+                    }
+                }
+            },
+        ]
+    }
+}
 #endif

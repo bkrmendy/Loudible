@@ -6,6 +6,12 @@ import PackageDescription
 /// from this file rather than through pkg-config, so Xcode finds it without any environment.
 let ffmpeg = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Vendor/ffmpeg").path
 
+// Generated galleries live beside their views; they are developer output, not package resources.
+let appSources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    .appendingPathComponent("Sources/LoudibleApp")
+let previewGalleries = ((try? FileManager.default.contentsOfDirectory(atPath: appSources.path)) ?? [])
+    .filter { $0.hasSuffix("-Previews") }
+
 let package = Package(
     name: "Loudible",
     platforms: [.macOS(.v14)],
@@ -62,7 +68,8 @@ let package = Package(
                 "LoudibleAdapters",
                 "LoudiblePresentation",
                 "LoudibleFFmpeg",
-            ]
+            ],
+            exclude: previewGalleries
         ),
         // `swift run Loudible`. The Xcode project has its own shell around the same launcher.
         .executableTarget(

@@ -13,6 +13,7 @@
 /* Begin PBXFileReference section */
 		AE0000000000000000000301 /* Loudible.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Loudible.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AE0000000000000000000302 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AE0000000000000000000303 /* Loudible Package */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = "Loudible Package"; path = ..; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -35,6 +36,7 @@
 			isa = PBXGroup;
 			children = (
 				AE0000000000000000000401 /* Loudible */,
+				AE0000000000000000000303 /* Loudible Package */,
 				AE0000000000000000000302 /* Info.plist */,
 				AE0000000000000000000602 /* Products */,
 			);

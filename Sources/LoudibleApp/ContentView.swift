@@ -206,9 +206,47 @@ private extension View {
 }
 
 #if DEBUG
-#Preview("Window – signed out") { PreviewCatalog.view(.windowSignedOut) }
-#Preview("Window – library") { PreviewCatalog.view(.windowLibrary) }
-#Preview("Window – selection") { PreviewCatalog.view(.windowSelection) }
-#Preview("Window – loading") { PreviewCatalog.view(.windowLoading) }
-#Preview("Window – load failed") { PreviewCatalog.view(.windowLoadFailed) }
+extension ViewPreviews {
+    static var window: [ViewPreview] {
+        [
+            ViewPreview("windowSignedOut", "Window – signed out", width: 1100, height: 600, windowChrome: true) {
+                let model = AppViewModel.preview(signedIn: false)
+                ContentView(model: model)
+                    .task {
+                        await model.start()
+                    }
+            },
+            ViewPreview("windowLibrary", "Window – library", width: 1100, height: 600, windowChrome: true) {
+                let model = AppViewModel.preview()
+                ContentView(model: model)
+                    .task {
+                        await model.start()
+                    }
+            },
+            ViewPreview("windowSelection", "Window – selection", width: 1100, height: 600, windowChrome: true) {
+                let model = AppViewModel.preview()
+                ContentView(model: model)
+                    .task {
+                        await model.start()
+                        model.library.setSelection([PreviewData.books[0].asin, PreviewData.books[4].asin])
+                    }
+            },
+            ViewPreview("windowLoading", "Window – loading", width: 1100, height: 600, windowChrome: true) {
+                let model = AppViewModel.preview(library: .loading)
+                ContentView(model: model)
+                    .task {
+                        await model.start()
+                    }
+            },
+            ViewPreview("windowLoadFailed", "Window – load failed", width: 1100, height: 600, windowChrome: true) {
+                let model = AppViewModel
+                    .preview(library: .failing("Audible returned HTTP 500 (Internal Server Error)."))
+                ContentView(model: model)
+                    .task {
+                        await model.start()
+                    }
+            },
+        ]
+    }
+}
 #endif

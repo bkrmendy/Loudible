@@ -104,7 +104,7 @@ live.
 ### Requirements
 
 - Apple Silicon Mac and Xcode 27 in `/Applications` (the Command Line Tools alone are not
-  enough: SwiftUI previews need Xcode's macro plugins). Homebrew is not needed.
+  enough: SwiftUI and Swift Testing need Xcode's macro plugins). Homebrew is not needed.
 - FFmpeg is built from source by `Scripts/build-ffmpeg.sh`, which `test.sh` and `build-app.sh`
   run for you. It downloads the release pinned in `Scripts/ffmpeg-version.sh`, checks its SHA-256,
   and installs a minimal LGPL build into `Vendor/` (about a minute, done once).
@@ -113,13 +113,46 @@ Alamofire is resolved through Swift Package Manager. Keep `Package.resolved` com
 updating Alamofire, refresh `Licenses/Alamofire.txt` from that version's license.
 
 The code is a Swift package. `App/Loudible.xcodeproj` wraps it in an app target: open it,
-press ⌘R to run, and use the canvas to see every view state as a preview. Build FFmpeg once first:
+press ⌘R to run. Build FFmpeg once first:
 
 ```sh
 cd NativeMac
 Scripts/build-ffmpeg.sh
 open App/Loudible.xcodeproj
 ```
+
+Preview examples live beside their views in `Sources/LoudibleApp`, inside `#if DEBUG`
+extensions of `ViewPreviews`. They use synthetic data and do not launch Loudible or contact Audible.
+Generate static HTML galleries from the terminal:
+
+```sh
+Scripts/render-previews.sh --all
+Scripts/render-previews.sh --file BookTile.swift
+Scripts/render-previews.sh --state tileSelected,tileDownloading
+Scripts/render-previews.sh --all --output /private/tmp/loudible-previews
+Scripts/render-previews.sh --list
+```
+
+By default, each source file gets a sibling folder, for example:
+
+```text
+Sources/LoudibleApp/BookTile-Previews/
+  BookTilePreview.html
+  images/
+    tileSelected.png
+    tileDownloading.png
+    …
+```
+
+Open the HTML file in any browser to see the named states together. The page uses only local,
+relative links, so you can copy or share the whole folder. Generated galleries are tracked in git
+and excluded from the Swift package. A filtered run replaces that file's gallery with the selected
+states; `--all` regenerates every image and gallery.
+
+The runner uses the sandboxed test host and invisible AppKit windows for accurate native controls.
+It requires a logged-in macOS graphical session, but shows no windows and needs neither Xcode's
+canvas nor a running app. To add an example, add a `ViewPreview` with a unique ID, title, size and
+view closure beside its view. For a new source file, also register its array in `ViewPreviews.all`.
 
 From the terminal, source `Scripts/env.sh` before `swift` commands; it selects Xcode's toolchain
 and checks the FFmpeg build:
@@ -262,5 +295,6 @@ To upgrade FFmpeg, follow the steps at the top of `Scripts/ffmpeg-version.sh`.
   `audible_key`/`audible_iv` and `activation_bytes` demuxer options. The remux itself was checked
   by hand with a synthetic unencrypted M4A: audio packets were identical, and chapters,
   metadata, and cover art were kept.
-- The UI has no automated tests. `SNAPSHOT_PATH=/abs/dir Scripts/test.sh --filter Snapshot`
-  renders every preview state to PNGs for a look, but asserts nothing.
+- UI behaviour has no automated tests. `Scripts/render-previews.sh --all` generates galleries
+  for visual inspection; it does not assert their appearance. The legacy
+  `SNAPSHOT_PATH=/abs/dir Scripts/test.sh --filter SnapshotTests/snapshot` command still writes flat PNGs.

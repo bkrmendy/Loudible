@@ -29,7 +29,7 @@ struct AccountButton: View {
 struct AccountButtonLabel: View {
     let name: String?
     let isSignedIn: Bool
-    let needsReauthentication: Bool
+    var needsReauthentication = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -92,6 +92,28 @@ struct AccountPopoverContent: View {
     let canSignOut: Bool
     let signIn: () -> Void
     let signOut: () -> Void
+
+    init(
+        account: AudibleSession? = nil,
+        otherMarketplaces: [LibraryViewModel.MarketplaceCount] = [],
+        needsReauthentication: Bool = false,
+        marketplace: Binding<Marketplace> = .constant(.us),
+        canChangeMarketplace: Bool = true,
+        canSignIn: Bool = true,
+        canSignOut: Bool = false,
+        signIn: @escaping () -> Void = {},
+        signOut: @escaping () -> Void = {}
+    ) {
+        self.account = account
+        self.otherMarketplaces = otherMarketplaces
+        self.needsReauthentication = needsReauthentication
+        _marketplace = marketplace
+        self.canChangeMarketplace = canChangeMarketplace
+        self.canSignIn = canSignIn
+        self.canSignOut = canSignOut
+        self.signIn = signIn
+        self.signOut = signOut
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -156,6 +178,20 @@ struct SignInPanelContent: View {
     let canChangeMarketplace: Bool
     let canSignIn: Bool
     let signIn: () -> Void
+
+    init(
+        needsReauthentication: Bool = false,
+        marketplace: Binding<Marketplace> = .constant(.us),
+        canChangeMarketplace: Bool = true,
+        canSignIn: Bool = true,
+        signIn: @escaping () -> Void = {}
+    ) {
+        self.needsReauthentication = needsReauthentication
+        _marketplace = marketplace
+        self.canChangeMarketplace = canChangeMarketplace
+        self.canSignIn = canSignIn
+        self.signIn = signIn
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -245,18 +281,58 @@ struct AccountAvatar: View {
 }
 
 #if DEBUG
-#Preview("Avatar – initial") { PreviewCatalog.view(.avatarInitial) }
-#Preview("Avatar – no name") { PreviewCatalog.view(.avatarNoName) }
-#Preview("Avatar – 44 pt") { PreviewCatalog.view(.avatarLarge) }
-#Preview("Account button – signed out") { PreviewCatalog.view(.accountButtonSignedOut) }
-#Preview("Account button – signed in") { PreviewCatalog.view(.accountButtonSignedIn) }
-#Preview("Account button – long name") { PreviewCatalog.view(.accountButtonLongName) }
-#Preview("Account button – needs re-auth") { PreviewCatalog.view(.accountButtonNeedsReauthentication) }
-#Preview("Account popover – signed out") { PreviewCatalog.view(.accountPopoverSignedOut) }
-#Preview("Account popover – working") { PreviewCatalog.view(.accountPopoverWorking) }
-#Preview("Account popover – session expired") { PreviewCatalog.view(.accountPopoverExpired) }
-#Preview("Account popover – signed in") { PreviewCatalog.view(.accountPopoverSignedIn) }
-#Preview("Account popover – other marketplaces") { PreviewCatalog.view(.accountPopoverOtherMarketplaces) }
-#Preview("Sign-in panel") { PreviewCatalog.view(.signInPanel) }
-#Preview("Sign-in panel – session expired") { PreviewCatalog.view(.signInPanelExpired) }
+extension ViewPreviews {
+    static var account: [ViewPreview] {
+        [
+            ViewPreview("avatarInitial", "Avatar – initial", width: 80, height: 80) {
+                AccountAvatar(name: "Jane Doe", size: 24)
+            },
+            ViewPreview("avatarNoName", "Avatar – no name", width: 80, height: 80) {
+                AccountAvatar(name: nil, size: 24)
+            },
+            ViewPreview("avatarLarge", "Avatar – 44 pt", width: 80, height: 80) {
+                AccountAvatar(name: "Jane Doe", size: 44)
+            },
+            ViewPreview("accountButtonSignedOut", "Account button – signed out", width: 260, height: 60) {
+                AccountButtonLabel(name: nil, isSignedIn: false)
+            },
+            ViewPreview("accountButtonSignedIn", "Account button – signed in", width: 260, height: 60) {
+                AccountButtonLabel(name: "Jane Doe", isSignedIn: true)
+            },
+            ViewPreview("accountButtonLongName", "Account button – long name", width: 260, height: 60) {
+                AccountButtonLabel(name: "Maximiliane Alexandra Featherstonehaugh-Smythe", isSignedIn: true)
+            },
+            ViewPreview("accountButtonNeedsReauthentication", "Account button – needs re-auth", width: 260,
+            height: 60) {
+                AccountButtonLabel(name: nil, isSignedIn: false, needsReauthentication: true)
+            },
+            ViewPreview("accountPopoverSignedOut", "Account popover – signed out", width: 280, height: 240) {
+                AccountPopoverContent()
+            },
+            ViewPreview("accountPopoverWorking", "Account popover – working", width: 280, height: 240) {
+                AccountPopoverContent(canChangeMarketplace: false, canSignIn: false)
+            },
+            ViewPreview("accountPopoverExpired", "Account popover – session expired", width: 280, height: 240) {
+                AccountPopoverContent(needsReauthentication: true, canSignOut: true)
+            },
+            ViewPreview("accountPopoverSignedIn", "Account popover – signed in", width: 280, height: 240) {
+                AccountPopoverContent(account: PreviewData.session, canSignOut: true)
+            },
+            ViewPreview("accountPopoverOtherMarketplaces", "Account popover – other marketplaces", width: 280,
+            height: 240) {
+                AccountPopoverContent(account: PreviewData.session, otherMarketplaces: [
+                    LibraryViewModel.MarketplaceCount(marketplace: .uk, count: 12), LibraryViewModel.MarketplaceCount(
+                        marketplace: .japan,
+                        count: 3),
+                ], canSignOut: true)
+            },
+            ViewPreview("signInPanel", "Sign-in panel", width: 400, height: 260) {
+                SignInPanelContent()
+            },
+            ViewPreview("signInPanelExpired", "Sign-in panel – session expired", width: 400, height: 260) {
+                SignInPanelContent(needsReauthentication: true)
+            },
+        ]
+    }
+}
 #endif
