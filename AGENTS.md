@@ -171,6 +171,20 @@ SHA-256), and update the `61.*` libavformat check in `env.sh` and the dylib name
 * The old `~/Library/Caches/<bundle id>/Downloads` folder is no longer used and is removed at launch.
 * Bundle id `local.loudible.Loudible` (set in the Xcode project).
 
+## Shared skills (Codex and Claude Code)
+
+* Keep skill sources in `.agents/skills/<name>/SKILL.md`. Each skill has a relative symlink at
+  `.claude/skills/<name>` pointing to `../../.agents/skills/<name>`. Commit both together;
+  the links resolve within each clone or worktree.
+* From the repo root, scaffold with
+  `python3 Scripts/new-skill.py <name> "What it does and when to use it"`.
+  Replace the generated TODO instructions before using the skill.
+* Keep `name`, `description`, Markdown instructions and supporting files portable. Avoid relying
+  on agent-specific substitutions, dynamic context injection or tool names in shared instructions.
+  Optional `agents/openai.yaml` metadata is specific to Codex.
+* Invoke with `$<name>` in Codex or `/<name>` in Claude Code. Keep shared repository rules here
+  rather than duplicating them in every skill.
+
 ## Housekeeping
 
 * `todo/` holds the user's working notes and feature wishes; read them for intent, don't edit
