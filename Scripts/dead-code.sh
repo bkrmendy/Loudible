@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 Scripts/build-ffmpeg.sh
 source Scripts/env.sh
 # Resolve the pinned tool before spending time on the clean build.
-Scripts/swiftlint.sh version
+Scripts/swiftlint.sh version > /dev/null
 
 mkdir -p "$PWD/.build/dead-code"
 work_dir="$(mktemp -d "$PWD/.build/dead-code/scan.XXXXXX")"
@@ -26,6 +26,14 @@ if ! grep -q -- ' -module-name LoudibleCore ' "$build_log"; then
     exit 1
 fi
 
+# SwiftPM's verbose log adds -v to swiftc arguments. SourceKit replays those arguments for
+# every symbol lookup, printing the compiler version thousands of times. Keep the full log
+# for troubleshooting, but remove that flag from the compiler invocations used for analysis.
+analysis_log="$work_dir/compiler.log"
+sed '/\/swiftc /s/ -v / /g' "$build_log" > "$analysis_log"
+
+echo "Checking for unused declarations…"
 Scripts/swiftlint.sh analyze --config "$PWD/.swiftlint.yml" \
-    --compiler-log-path "$build_log" --only-rule unused_declaration \
-    --force-exclude --strict "$@"
+    --compiler-log-path "$analysis_log" --only-rule unused_declaration \
+    --force-exclude --strict --quiet "$@"
+echo "No unused declarations found."

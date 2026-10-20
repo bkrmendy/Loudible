@@ -94,7 +94,7 @@ public final class AppViewModel {
 
     /// Continues the signed-in account's unfinished downloads, except those that failed in this
     /// session (they wait for Resume Download), and deletes the ones that can't be continued:
-    /// another account's, ones of unknown size, and books no longer in the library. Does nothing
+    /// another account's and books no longer in the library. Does nothing
     /// unless the library loaded completely, so a failed refresh never deletes anything.
     public func reconcilePartialDownloads() async {
         guard let customerID = session.session?.customerID,
@@ -107,7 +107,7 @@ public final class AppViewModel {
         var resume: [Audiobook] = []
         for record in records where !busy.contains(record.book.asin) {
             let asin = record.book.asin
-            if record.customerID != customerID || record.checkpoint.expectedLength <= 0 {
+            if record.customerID != customerID {
                 discard.append(asin)
             } else if !library.isInLibrary(asin) {
                 // A store that couldn't be checked may still hold it.
@@ -241,7 +241,7 @@ public final class AppViewModel {
 
     public var hasActiveJobs: Bool { export.activeJobCount > 0 }
 
-    /// Stops every job, then signs out. Downloads in progress keep their bytes and continue
+    /// Stops every job, then signs out. Downloads keep native recovery state and resume if possible
     /// after signing in to the same account again; exports and jobs that hadn't started are
     /// dropped. Finished downloads and exports are kept.
     public func signOut() async {

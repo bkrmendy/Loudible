@@ -5,8 +5,8 @@ import Foundation
 /// The audio file in `folder` is the source of truth for "downloaded": a book is downloaded when a
 /// non-hidden `.aax`/`.aaxc` whose name carries `[ASIN]` exists there. Manifests (`<ASIN>.json`,
 /// plus the cover as `<ASIN>.cover`) live in `manifestFolder`, owner-only, and a manifest without
-/// its audio file is an orphan to delete. An unfinished download kept to be continued is a hidden
-/// file in `folder` plus its `PartialDownload` record (`<ASIN>.partial`) in `manifestFolder`.
+/// its audio file is an orphan to delete. Unfinished-download records (`<ASIN>.partial`) live
+/// in `manifestFolder`; native temporary audio files are managed by URLSession.
 public struct LocalDownloads: Sendable {
     public static let audioExtensions: Set<String> = ["aax", "aaxc"]
 
@@ -181,21 +181,17 @@ public struct LocalDownloads: Sendable {
         removeManifest(asin: asin)
     }
 
-    /// Removes what an interrupted run left behind, except the downloads kept to be continued:
-    /// `.partial` files no record refers to, records whose file is gone, and the hidden
-    /// temporary files (covers, half-written records) in the manifest folder.
+    /// Removes obsolete recovery records and app-owned partial files left by interrupted runs.
+    /// Native recovery records remain useful even without a file in the downloads folder.
     public func sweepPartials() {
-        var kept = Set<String>()
-        for record in partialDownloads() {
-            let file = partialFileURL(for: record.book.asin)
-            if fileManager.fileExists(atPath: file.path) {
-                kept.insert(file.lastPathComponent)
-            } else {
-                try? fileManager.removeItem(at: partialRecordURL(for: record.book.asin))
+        for name in partialRecordNames() {
+            let url = manifestFolder.appendingPathComponent(name)
+            if let version = decode(RecoveryVersion.self, from: url), version.version == 1 {
+                removePartialDownload(asin: String(name.dropLast(".partial".count)))
             }
         }
         let names = (try? fileManager.contentsOfDirectory(atPath: folder.path)) ?? []
-        for name in names where ExportFileNaming.isPartial(name) && !kept.contains(name) {
+        for name in names where ExportFileNaming.isPartial(name) {
             try? fileManager.removeItem(at: folder.appendingPathComponent(name))
         }
         let hidden = ((try? fileManager.contentsOfDirectory(atPath: manifestFolder.path)) ?? [])
@@ -207,7 +203,7 @@ public struct LocalDownloads: Sendable {
 
     // MARK: Unfinished downloads
 
-    /// Where the bytes of the book's unfinished download are kept, in the download folder.
+    /// Staging destination for a completed native download, before final naming.
     public func partialFileURL(for asin: String) -> URL {
         folder.appendingPathComponent(ExportFileNaming.resumablePartialName(asin: asin), isDirectory: false)
     }
@@ -217,16 +213,24 @@ public struct LocalDownloads: Sendable {
     }
 
     public func partialDownload(for asin: String) -> PartialDownload? {
-        decode(PartialDownload.self, from: partialRecordURL(for: asin))
+        guard let record = decode(PartialDownload.self, from: partialRecordURL(for: asin)),
+              record.version == PartialDownload.currentVersion else { return nil }
+        return record
     }
 
-    /// Every readable record, whether or not its file still exists.
-    public func partialDownloads() -> [PartialDownload] {
-        let names = (try? fileManager.contentsOfDirectory(atPath: manifestFolder.path)) ?? []
-        return names
+    private struct RecoveryVersion: Decodable {
+        let version: Int
+    }
+
+    private func partialRecordNames() -> [String] {
+        ((try? fileManager.contentsOfDirectory(atPath: manifestFolder.path)) ?? [])
             .filter { !$0.hasPrefix(".") && $0.hasSuffix(".partial") }
             .sorted()
-            .compactMap { decode(PartialDownload.self, from: manifestFolder.appendingPathComponent($0)) }
+    }
+
+    /// Every current recovery record, including downloads that must restart from zero.
+    public func partialDownloads() -> [PartialDownload] {
+        partialRecordNames().compactMap { partialDownload(for: String($0.dropLast(".partial".count))) }
     }
 
     /// Owner-only, like the manifests: the record names the account.
@@ -244,13 +248,8 @@ public struct LocalDownloads: Sendable {
         try? fileManager.removeItem(at: partialRecordURL(for: asin))
     }
 
-    /// How much of the book's unfinished download is on disk, if one is kept and its size is known.
+    /// Last observed interruption progress; native temporary files may since have been reclaimed.
     public func partialProgress(for record: PartialDownload) -> TransferProgress? {
-        let expected = record.checkpoint.expectedLength
-        guard expected > 0,
-              let size = (try? fileManager
-              .attributesOfItem(atPath: partialFileURL(for: record.book.asin).path))?[.size] as? Int64
-        else { return nil }
-        return TransferProgress(bytesReceived: min(size, expected), bytesExpected: expected)
+        record.recovery.progress ?? TransferProgress(bytesReceived: 0, bytesExpected: 0)
     }
 }

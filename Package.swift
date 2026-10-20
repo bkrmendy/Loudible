@@ -14,13 +14,19 @@ let package = Package(
         // Consumed by the app target of App/Loudible.xcodeproj.
         .library(name: "LoudibleApp", targets: ["LoudibleApp"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/Alamofire/Alamofire.git", from: "5.12.0"),
+    ],
     targets: [
         // Business rules only: Foundation, no UI frameworks, no network/crypto/Keychain code.
         .target(name: "LoudibleCore"),
         // Audible HTTP API, Keychain, and file downloads.
         .target(
             name: "LoudibleAdapters",
-            dependencies: ["LoudibleCore"]
+            dependencies: [
+                "LoudibleCore",
+                .product(name: "Alamofire", package: "Alamofire"),
+            ]
         ),
         // Testable view models. Foundation + Observation only.
         .target(

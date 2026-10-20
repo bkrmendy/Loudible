@@ -41,6 +41,8 @@ struct LoginSheetContent<Browser: View>: View {
     let submitPastedURL: () -> Void
     let cancel: () -> Void
     @ViewBuilder let browser: () -> Browser
+    // SwiftUI reads this through $showsBrowserFallback; the analyzer misses projected bindings.
+    // swiftlint:disable:next unused_declaration
     @State private var showsBrowserFallback: Bool
 
     init(

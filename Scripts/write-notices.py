@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes the app's FFmpeg notices, license texts, and About-panel credits.
+"""Writes the app's third-party notices, license texts, and About-panel credits.
 
 Usage: write-notices.py <FFmpeg install prefix> <Contents/Resources dir>
 
@@ -7,6 +7,7 @@ Reads BUILD-INFO.txt written by Scripts/build-ffmpeg.sh.
 """
 
 import html
+import json
 import os
 import shutil
 import sys
@@ -19,7 +20,17 @@ os.makedirs(licenses, exist_ok=True)
 for name in ("COPYING.LGPLv2.1", "LICENSE.md"):
     shutil.copy(os.path.join(prefix, "share", "licenses", name), os.path.join(licenses, name))
 
+root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+with open(os.path.join(root, "Package.resolved")) as file:
+    pins = json.load(file)["pins"]
+alamofire_version = next(pin["state"]["version"] for pin in pins if pin["identity"] == "alamofire")
+shutil.copy(os.path.join(root, "Licenses", "Alamofire.txt"), os.path.join(resources, "Licenses", "Alamofire.txt"))
+
 notices = f"""Loudible third-party notices
+
+Alamofire {alamofire_version}
+https://github.com/Alamofire/Alamofire
+Distributed under the MIT License. License text: Licenses/Alamofire.txt.
 
 FFmpeg {info['version']}
 This software uses libraries from the FFmpeg project (https://ffmpeg.org) under the
@@ -44,6 +55,8 @@ with open(os.path.join(resources, "THIRD_PARTY_NOTICES.txt"), "w") as file:
 credits = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body style="font: 11px -apple-system, sans-serif; text-align: center">
+<p>Downloads use <a href="https://github.com/Alamofire/Alamofire">Alamofire</a>
+{html.escape(alamofire_version)} under the MIT License.</p>
 <p>This software uses libraries from the <a href="https://ffmpeg.org">FFmpeg</a> project
 under the <a href="https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html">LGPLv2.1</a>.</p>
 <p>FFmpeg {html.escape(info['version'])} source:

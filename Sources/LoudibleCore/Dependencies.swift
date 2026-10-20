@@ -25,7 +25,7 @@ public protocol CredentialStore: Sendable {
 }
 
 /// How much of a download has arrived.
-public struct TransferProgress: Sendable, Equatable {
+public struct TransferProgress: Sendable, Equatable, Codable {
     public var bytesReceived: Int64
     public var bytesExpected: Int64
 
@@ -40,60 +40,27 @@ public struct TransferProgress: Sendable, Equatable {
     }
 }
 
-/// Identifies one version of a remote file, so bytes of two versions are never joined.
-public enum DownloadValidator: Sendable, Equatable, Codable {
-    case etag(String)
-    case lastModified(String)
-    /// The server sent neither; only the total length can be compared.
-    case none
-}
+/// Native recovery state. Resume data is opaque and may become unusable between launches.
+public struct DownloadRecovery: Sendable, Equatable, Codable {
+    public var resumeData: Data?
+    public var progress: TransferProgress?
 
-/// Where an earlier attempt left off. Only the first `committedLength` bytes of the file are
-/// known to be on disk; anything after them may not have survived a crash or power loss.
-public struct ResumePoint: Sendable, Equatable {
-    public var committedLength: Int64
-    public var expectedLength: Int64
-    public var validator: DownloadValidator
-
-    public init(committedLength: Int64, expectedLength: Int64, validator: DownloadValidator) {
-        self.committedLength = committedLength
-        self.expectedLength = expectedLength
-        self.validator = validator
+    public init(resumeData: Data? = nil, progress: TransferProgress? = nil) {
+        self.resumeData = resumeData
+        self.progress = progress
     }
 }
 
-/// The state of a download as of its last flush to disk: what is needed to continue it later.
-public struct DownloadCheckpoint: Sendable, Equatable, Codable {
-    /// 0 when the server did not announce the size; such a download cannot be resumed.
-    public var expectedLength: Int64
-    public var validator: DownloadValidator
-    public var committedLength: Int64
-
-    public init(expectedLength: Int64, validator: DownloadValidator, committedLength: Int64) {
-        self.expectedLength = expectedLength
-        self.validator = validator
-        self.committedLength = committedLength
-    }
-
-    public var resumePoint: ResumePoint {
-        ResumePoint(committedLength: committedLength, expectedLength: expectedLength, validator: validator)
-    }
-}
-
-/// Downloads a URL completely to `destination`.
+/// Downloads a URL completely to `destination`; interrupted bytes are managed by the adapter.
 public protocol FileDownloader: Sendable {
-    /// With `resume`, continues the file already at `destination` when the server can send the
-    /// rest of the same file, and starts over otherwise. On failure or cancellation it leaves
-    /// what it wrote; the caller decides whether to keep it.
-    /// - Parameters:
-    ///   - checkpoint: called once the response arrives, then whenever written bytes have been
-    ///     flushed to disk.
-    ///   - progress: called only once the size is known, and with the final count on success.
+    /// Attempts native resumption, falling back once to `url` if it cannot resume.
+    /// Recovery is reported before returning, including on cancellation. A nil token means
+    /// the next attempt must restart. Callers decide whether to retain the recovery state.
     func download(
         from url: URL,
         to destination: URL,
-        resume: ResumePoint?,
-        checkpoint: @escaping @Sendable (DownloadCheckpoint) -> Void,
+        resumeData: Data?,
+        recovery: @escaping @Sendable (DownloadRecovery) -> Void,
         progress: @escaping @Sendable (TransferProgress) -> Void
     ) async throws
 }
@@ -105,7 +72,7 @@ extension FileDownloader {
         to destination: URL,
         progress: @escaping @Sendable (TransferProgress) -> Void
     ) async throws {
-        try await download(from: url, to: destination, resume: nil, checkpoint: { _ in }, progress: progress)
+        try await download(from: url, to: destination, resumeData: nil, recovery: { _ in }, progress: progress)
     }
 }
 

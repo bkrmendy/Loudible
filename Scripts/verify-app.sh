@@ -54,9 +54,13 @@ else
     fail "code signature is invalid"
 fi
 
-for file in THIRD_PARTY_NOTICES.txt Credits.html Licenses/FFmpeg/COPYING.LGPLv2.1 Licenses/FFmpeg/LICENSE.md; do
+for file in THIRD_PARTY_NOTICES.txt Credits.html Licenses/Alamofire.txt \
+    Licenses/FFmpeg/COPYING.LGPLv2.1 Licenses/FFmpeg/LICENSE.md; do
     [ -s "$RESOURCES/$file" ] || fail "missing Contents/Resources/$file"
 done
+
+cmp -s Licenses/Alamofire.txt "$RESOURCES/Licenses/Alamofire.txt" || fail "Alamofire license differs from source"
+grep -q 'Alamofire' "$RESOURCES/THIRD_PARTY_NOTICES.txt" || fail "Alamofire notice is missing"
 
 # Launch the bundled executable headlessly and record every image dyld loads.
 log="$(mktemp -t loudible-dyld)"

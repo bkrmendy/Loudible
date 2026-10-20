@@ -72,6 +72,12 @@ The app checks the folders at launch, after Refresh Library, when it becomes act
 each job, so files renamed, moved, or deleted in Finder are picked up. A book counts as
 downloaded when the download folder has a `.aax`/`.aaxc` file whose name contains `[ASIN]`.
 
+Quitting or signing out saves native download recovery data when available. The next attempt
+resumes if possible; an expired URL or unavailable temporary file causes a fresh download instead.
+A crash can lose the current transfer's progress. Cancel and Delete Download discard recovery state.
+Older byte-checkpoint downloads cannot be migrated and are removed on first launch after this update;
+start those unfinished downloads again. Finished downloads and exports are preserved.
+
 Credentials are stored in one Keychain item, `Loudible.AudibleSession`. **Sign Out**
 deletes that item but does not deregister the device on Amazon's side; it cancels running jobs
 and keeps finished files. The decryption keys, chapters, and cover of each download are saved
@@ -90,6 +96,7 @@ live.
 - [Libation](https://github.com/rmcrackan/Libation) and the
   [`audible`](https://github.com/mkb79/Audible) Python package, whose work documents the Audible
   protocol this app follows.
+- [Alamofire](https://github.com/Alamofire/Alamofire), which handles downloads and native resumption (MIT).
 - [FFmpeg](https://ffmpeg.org), which does the decryption and remuxing (LGPL-2.1-or-later).
 
 ## Development
@@ -101,6 +108,9 @@ live.
 - FFmpeg is built from source by `Scripts/build-ffmpeg.sh`, which `test.sh` and `build-app.sh`
   run for you. It downloads the release pinned in `Scripts/ffmpeg-version.sh`, checks its SHA-256,
   and installs a minimal LGPL build into `Vendor/` (about a minute, done once).
+
+Alamofire is resolved through Swift Package Manager. Keep `Package.resolved` committed; when
+updating Alamofire, refresh `Licenses/Alamofire.txt` from that version's license.
 
 The code is a Swift package. `App/Loudible.xcodeproj` wraps it in an app target: open it,
 press ⌘R to run, and use the canvas to see every view state as a preview. Build FFmpeg once first:

@@ -49,8 +49,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
-    /// Suspends the jobs and quits once the downloads in progress have saved their bytes, to be
-    /// continued at the next launch. Asks first only when exports or jobs that haven't started
+    /// Suspends jobs and quits once downloads have saved native recovery state, to resume or
+    /// restart at the next launch. Asks first only when exports or jobs that haven't started
     /// would be lost.
     @MainActor
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -59,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let alert = NSAlert()
             alert.messageText = "Quit and cancel the exports and queued jobs?"
             alert.informativeText = """
-            Exports in progress and queued jobs are cancelled. Downloads in progress continue next time. Finished \
+            Exports in progress and queued jobs are cancelled. Downloads restart or resume next time. Finished \
             files are kept.
             """
             alert.addButton(withTitle: "Quit")
@@ -95,7 +95,7 @@ enum CompositionRoot {
         let queue = ExportQueue(
             auth: auth,
             api: api,
-            downloader: URLSessionFileDownloader(configuration: .default),
+            downloader: AlamofireFileDownloader(configuration: .default),
             converter: FFmpegConverter(),
             downloads: downloads
         )
