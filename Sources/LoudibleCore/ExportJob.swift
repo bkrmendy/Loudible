@@ -72,6 +72,13 @@ public struct ExportJob: Sendable, Identifiable, Equatable {
         if case .running(.downloading, _) = newState { self.transferred = transferred } else { self.transferred = nil }
     }
 
+    /// Only an identified new transfer attempt may reset progress within downloading.
+    mutating func restartDownload() {
+        guard case .running(.downloading, _) = state else { return }
+        state = .running(.downloading, progress: 0)
+        transferred = nil
+    }
+
     static func allows(from old: State, to new: State) -> Bool {
         switch (old, new) {
         case (.completed, _), (.failed, _), (.cancelled, _):

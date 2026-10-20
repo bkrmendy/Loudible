@@ -23,7 +23,8 @@ for macho in "${machos[@]}"; do
     archs="$(lipo -archs "$macho")"
     [ "$archs" = "arm64" ] || fail "$macho architectures are '$archs', expected arm64"
 
-    minos="$(otool -l "$macho" | awk '/LC_BUILD_VERSION/{found=1} found && /minos/{print $2; exit}')"
+    # Consume all load commands: early awk exit can SIGPIPE otool under pipefail.
+    minos="$(otool -l "$macho" | awk '/LC_BUILD_VERSION/{found=1} found && /minos/ && !printed {print $2; printed=1}')"
     [ "$(printf '%s\n%s\n' "$minos" "$FFMPEG_MINIMUM_MACOS" | sort -V | tail -1)" = "$FFMPEG_MINIMUM_MACOS" ] \
         || fail "$macho requires macOS $minos, newer than $FFMPEG_MINIMUM_MACOS"
 

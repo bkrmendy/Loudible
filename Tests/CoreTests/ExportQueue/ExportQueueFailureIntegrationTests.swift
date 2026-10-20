@@ -3,9 +3,10 @@ import Testing
 import LoudibleCore
 import TestSupport
 
-// MARK: Failures
+@Suite struct ExportQueueFailureIntegrationTests: ExportQueueTestCase {
+    let fixture: ExportQueueTestFixture
+    init() throws { fixture = try ExportQueueTestFixture() }
 
-extension ExportQueueTests {
     @Test func failureContinuesWithNextBookAndKeepsCompletedExports() async throws {
         defer { cleanUp() }
         api.licenseHandler.withLock {

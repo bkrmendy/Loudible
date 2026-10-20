@@ -3,9 +3,10 @@ import Testing
 import LoudibleCore
 import TestSupport
 
-// MARK: Authentication
+@Suite struct ExportQueueAuthenticationTests: ExportQueueTestCase {
+    let fixture: ExportQueueTestFixture
+    init() throws { fixture = try ExportQueueTestFixture() }
 
-extension ExportQueueTests {
     @Test func pausesForAuthenticationAndResumesAfterSignIn() async throws {
         defer { cleanUp() }
         let signedInAgain = Locked(false)

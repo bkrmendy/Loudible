@@ -1,4 +1,5 @@
 import Foundation
+import LoudibleScheduling
 
 /// Schedules downloads and exports.
 ///
@@ -16,52 +17,20 @@ import Foundation
 /// Failed or suspended downloads keep a `PartialDownload` recovery record; explicit cancellation
 /// deletes it. Native resumption is best effort, with a fresh download as fallback.
 public actor ExportQueue {
-    public struct Snapshot: Sendable, Equatable {
-        public var jobs: [ExportJob]
-        public var isRunning: Bool
-        public var isWaitingForAuthentication: Bool
-
-        public init(jobs: [ExportJob] = [], isRunning: Bool = false, isWaitingForAuthentication: Bool = false) {
-            self.jobs = jobs
-            self.isRunning = isRunning
-            self.isWaitingForAuthentication = isWaitingForAuthentication
-        }
-
-        /// Completion across all jobs (0...1).
-        public var fractionCompleted: Double {
-            guard !jobs.isEmpty else { return 0 }
-            return jobs.map(\.fractionCompleted).reduce(0, +) / Double(jobs.count)
-        }
-    }
-
     public enum StartError: Error, Equatable {
         case nothingToExport
         case destinationUnavailable(String)
     }
 
-    /// Appended to a conversion error when the input was a kept download, which may be damaged.
-    static let redownloadHint = "If this keeps failing, delete the download and download it again."
-
-    let auth: AuthenticationCoordinator
-    let api: any AudibleAPI
-    let downloader: any FileDownloader
-    let converter: any AudioConverter
-    let downloads: LocalDownloads
-    private let maximumConcurrentBooks: Int
-    let fileManager = FileManager.default
-
-    var snapshot = Snapshot() {
-        didSet {
-            guard snapshot != oldValue else { return }
-            for continuation in observers.values { continuation.yield(snapshot) }
-        }
-    }
-    private var observers: [UUID: AsyncStream<Snapshot>.Continuation] = [:]
+    private let downloads: LocalDownloads
+    private let download: DownloadWorkflow
+    private let exporter: BookExportWorkflow
+    private var scheduler: KeyedScheduler<UUID, String>
+    private var state = ExportQueueState()
     private var running: [UUID: Task<Void, Never>] = [:]
-    var exportDestinations: [UUID: URL] = [:]
-    var authenticationWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
-    /// Running jobs stopped by `suspend()`: their downloads keep recovery state.
-    var suspended: Set<UUID> = []
+    private var exportDestinations: [UUID: URL] = [:]
+    private var authenticationWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
+    private var suspended: Set<UUID> = []
     private var finishWaiters: [CheckedContinuation<Void, Never>] = []
 
     /// - Parameters:
@@ -75,31 +44,27 @@ public actor ExportQueue {
         downloads: LocalDownloads,
         maximumConcurrentBooks: Int = 3
     ) {
-        self.auth = auth
-        self.api = api
-        self.downloader = downloader
-        self.converter = converter
+        let licenses = LicenseProvider(auth: auth, api: api)
+        let finalizer = ExportFileFinalizer()
+        let download = DownloadWorkflow(licenses: licenses, downloader: downloader, downloads: downloads,
+            finalizer: finalizer)
         self.downloads = downloads
-        self.maximumConcurrentBooks = max(1, maximumConcurrentBooks)
+        self.download = download
+        self.exporter = BookExportWorkflow(download: download, converter: converter, finalizer: finalizer)
+        self.scheduler = KeyedScheduler(maximumConcurrent: maximumConcurrentBooks)
     }
 
-    public var currentSnapshot: Snapshot { snapshot }
+    public var currentSnapshot: Snapshot { state.snapshot }
 
     /// Emits the current snapshot, then every change.
     public func updates() -> AsyncStream<Snapshot> {
         let id = UUID()
-        let (stream, continuation) = AsyncStream<Snapshot>.makeStream(bufferingPolicy: .bufferingNewest(1))
-        continuation.yield(snapshot)
-        continuation.onTermination = { [weak self] _ in
+        return state.updates(id: id) { [weak self] in
             Task { await self?.removeObserver(id) }
         }
-        observers[id] = continuation
-        return stream
     }
 
-    private func removeObserver(_ id: UUID) {
-        observers[id] = nil
-    }
+    private func removeObserver(_ id: UUID) { state.removeObserver(id) }
 
     // MARK: Control
 
@@ -130,18 +95,18 @@ public actor ExportQueue {
         if kind == .export {
             guard let exportDestination else { throw .destinationUnavailable("") }
             var isDirectory: ObjCBool = false
-            guard fileManager.fileExists(atPath: exportDestination.path, isDirectory: &isDirectory),
+            guard FileManager.default.fileExists(atPath: exportDestination.path, isDirectory: &isDirectory),
                   isDirectory.boolValue,
-                  fileManager.isWritableFile(atPath: exportDestination.path)
+                  FileManager.default.isWritableFile(atPath: exportDestination.path)
             else { throw .destinationUnavailable(exportDestination.path) }
         }
 
         // A new run starts with a clean list; finished jobs of the last run are dropped.
-        if !snapshot.isRunning {
-            snapshot.jobs.removeAll()
+        if !state.snapshot.isRunning {
+            state.snapshot.jobs.removeAll()
             exportDestinations.removeAll()
         }
-        let pending = snapshot.jobs.filter { !$0.state.isFinished }
+        let pending = state.snapshot.jobs.filter { !$0.state.isFinished }
         var added: [UUID] = []
         for book in unique {
             let covered = pending.contains { job in
@@ -149,20 +114,19 @@ public actor ExportQueue {
             }
             guard !covered else { continue }
             let job = ExportJob(book: book, kind: kind)
-            snapshot.jobs.append(job)
+            state.snapshot.jobs.append(job)
+            scheduler.enqueue(id: job.id, key: book.asin)
             if kind == .export { exportDestinations[job.id] = exportDestination }
             added.append(job.id)
         }
-        if !added.isEmpty { snapshot.isRunning = true }
+        if !added.isEmpty { state.snapshot.isRunning = true }
         schedule()
         return added
     }
 
     /// Cancels every running and queued job. Completed ones are kept.
     public func cancel() {
-        for index in snapshot.jobs.indices where snapshot.jobs[index].state == .queued {
-            update(snapshot.jobs[index].id, to: .cancelled)
-        }
+        for entry in scheduler.removeAllPending() { state.update(entry.id, to: .cancelled) }
         for task in running.values { task.cancel() }
         finishIfIdle()
     }
@@ -179,16 +143,16 @@ public actor ExportQueue {
     public func cancel(_ id: UUID) {
         if let task = running[id] {
             task.cancel()
-        } else if let index = index(of: id), snapshot.jobs[index].state == .queued {
-            update(id, to: .cancelled)
+        } else if scheduler.removePending(id: id) {
+            state.update(id, to: .cancelled)
             schedule()
         }
     }
 
     /// Forgets the jobs of a finished run. Ignored while jobs are running.
     public func clear() {
-        guard !snapshot.isRunning else { return }
-        snapshot = Snapshot()
+        guard !state.snapshot.isRunning else { return }
+        state.snapshot = Snapshot()
         exportDestinations.removeAll()
     }
 
@@ -196,52 +160,120 @@ public actor ExportQueue {
     public func resumeAfterAuthentication() {
         let waiters = authenticationWaiters.values
         authenticationWaiters.removeAll()
-        snapshot.isWaitingForAuthentication = false
+        state.snapshot.isWaitingForAuthentication = false
+        scheduler.setPaused(false)
         waiters.forEach { $0.resume() }
         schedule()
     }
 
     /// Waits until no job is queued or running.
     public func waitUntilFinished() async {
-        guard snapshot.isRunning else { return }
+        guard state.snapshot.isRunning else { return }
         await withCheckedContinuation { finishWaiters.append($0) }
     }
 
     // MARK: Scheduling
 
-    /// Starts queued jobs in order, one per book, while there is capacity and nobody waits for sign-in.
-    func schedule() {
-        defer { finishIfIdle() }
-        guard !snapshot.isWaitingForAuthentication else { return }
-        // A book is blocked once an earlier unfinished job of it is seen, so its jobs keep their order.
-        var blocked = Set<String>()
-        for job in snapshot.jobs where !job.state.isFinished {
-            let asin = job.book.asin
-            guard !blocked.contains(asin) else { continue }
-            blocked.insert(asin)
-            guard job.state == .queued, running[job.id] == nil, running.count < maximumConcurrentBooks else { continue }
-            let id = job.id
+    private func schedule() {
+        for entry in scheduler.reserveReady() {
+            let id = entry.id
             running[id] = Task {
                 await self.process(id)
                 self.jobEnded(id)
             }
         }
+        finishIfIdle()
     }
 
     private func jobEnded(_ id: UUID) {
         running[id] = nil
+        scheduler.finish(id: id)
         suspended.remove(id)
         exportDestinations[id] = nil
         schedule()
     }
 
     private func finishIfIdle() {
-        guard snapshot.isRunning, running.isEmpty,
-              !snapshot.jobs.contains(where: { !$0.state.isFinished }) else { return }
-        snapshot.isRunning = false
-        snapshot.isWaitingForAuthentication = false
+        guard state.snapshot.isRunning, running.isEmpty, scheduler.isIdle else { return }
+        state.snapshot.isRunning = false
+        state.snapshot.isWaitingForAuthentication = false
         let waiters = finishWaiters
         finishWaiters.removeAll()
         waiters.forEach { $0.resume() }
+    }
+
+    private func process(_ id: UUID) async {
+        guard let index = state.index(of: id) else { return }
+        let job = state.snapshot.jobs[index]
+        while true {
+            do {
+                let output = try await runOnce(id, job: job)
+                state.update(id, to: .completed(output))
+                return
+            } catch .authenticationRequired {
+                state.update(id, to: .waitingForAuthentication)
+                await waitForAuthentication(id)
+                if Task.isCancelled {
+                    state.update(id, to: .cancelled)
+                    return
+                }
+                // A paused job restarts from licensing, whatever phase it then skips to.
+                state.update(id, to: .running(.licensing, progress: 0))
+            } catch .cancelled {
+                state.update(id, to: .cancelled)
+                return
+            } catch {
+                if Task.isCancelled {
+                    state.update(id, to: .cancelled)
+                } else {
+                    state.update(id, to: .failed("\(job.book.title): \(error.localizedDescription)"))
+                }
+                return
+            }
+        }
+    }
+
+    private func runOnce(_ id: UUID, job: ExportJob) async throws(ExporterError) -> URL {
+        if Task.isCancelled { throw .cancelled }
+        let context = ExportExecutionContext(
+            report: { [weak self] event in await self?.report(id, event: event) },
+            keepsRecovery: { [weak self] in await self?.keepsRecovery(id) ?? false })
+        switch job.kind {
+        case .download:
+            return try await download.run(book: job.book, kind: .download, context: context).input
+        case .export:
+            guard let destination = exportDestinations[id] else { throw .unexpected("No export folder.") }
+            return try await exporter.run(book: job.book, destination: destination, context: context)
+        }
+    }
+
+    private func report(_ id: UUID, event: ExportProgressEvent) { state.report(id, event: event) }
+    private func keepsRecovery(_ id: UUID) -> Bool { suspended.contains(id) }
+
+    // MARK: Authentication pause
+
+    private func waitForAuthentication(_ id: UUID) async {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume()
+                } else {
+                    authenticationWaiters[id] = continuation
+                    state.snapshot.isWaitingForAuthentication = true
+                    scheduler.setPaused(true)
+                }
+            }
+        } onCancel: {
+            Task { await self.wakeAuthenticationWaiter(id) }
+        }
+    }
+
+    private func wakeAuthenticationWaiter(_ id: UUID) {
+        authenticationWaiters.removeValue(forKey: id)?.resume()
+        if authenticationWaiters.isEmpty {
+            state.snapshot.isWaitingForAuthentication = false
+            scheduler.setPaused(false)
+            schedule()
+        }
     }
 }

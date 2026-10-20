@@ -40,6 +40,17 @@ public struct TransferProgress: Sendable, Equatable, Codable {
     }
 }
 
+/// Progress within one native transfer attempt; fallback increments the attempt number.
+public struct DownloadProgress: Sendable, Equatable {
+    public let attempt: Int
+    public let transferred: TransferProgress
+
+    public init(attempt: Int, transferred: TransferProgress) {
+        self.attempt = attempt
+        self.transferred = transferred
+    }
+}
+
 /// Native recovery state. Resume data is opaque and may become unusable between launches.
 public struct DownloadRecovery: Sendable, Equatable, Codable {
     public var resumeData: Data?
@@ -61,7 +72,7 @@ public protocol FileDownloader: Sendable {
         to destination: URL,
         resumeData: Data?,
         recovery: @escaping @Sendable (DownloadRecovery) -> Void,
-        progress: @escaping @Sendable (TransferProgress) -> Void
+        progress: @escaping @Sendable (DownloadProgress) -> Void
     ) async throws
 }
 
@@ -70,7 +81,7 @@ extension FileDownloader {
     public func download(
         from url: URL,
         to destination: URL,
-        progress: @escaping @Sendable (TransferProgress) -> Void
+        progress: @escaping @Sendable (DownloadProgress) -> Void
     ) async throws {
         try await download(from: url, to: destination, resumeData: nil, recovery: { _ in }, progress: progress)
     }

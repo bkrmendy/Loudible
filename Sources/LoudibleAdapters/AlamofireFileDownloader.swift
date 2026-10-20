@@ -16,14 +16,16 @@ public struct AlamofireFileDownloader: FileDownloader {
         to destination: URL,
         resumeData: Data?,
         recovery: @escaping @Sendable (DownloadRecovery) -> Void,
-        progress: @escaping @Sendable (TransferProgress) -> Void
+        progress: @escaping @Sendable (DownloadProgress) -> Void
     ) async throws {
         try Task.checkCancellation()
         let session = Session(configuration: configuration, startRequestsImmediately: false)
         // Clear consumed recovery before starting: a crash must not reuse an outdated token.
         recovery(DownloadRecovery())
+        progress(DownloadProgress(attempt: 0, transferred: TransferProgress(bytesReceived: 0, bytesExpected: 0)))
         let first = await DownloadAttempt().run(
-            session: session, url: url, destination: destination, resumeData: resumeData, progress: progress)
+            session: session, url: url, destination: destination, resumeData: resumeData,
+                progress: { progress(DownloadProgress(attempt: 0, transferred: $0)) })
         if Task.isCancelled {
             recovery(first.recovery)
             throw ExporterError.cancelled
@@ -33,8 +35,10 @@ public struct AlamofireFileDownloader: FileDownloader {
            !error.isExplicitlyCancelledError {
             try? FileManager.default.removeItem(at: destination)
             recovery(DownloadRecovery())
+            progress(DownloadProgress(attempt: 1, transferred: TransferProgress(bytesReceived: 0, bytesExpected: 0)))
             result = await DownloadAttempt().run(
-                session: session, url: url, destination: destination, resumeData: nil, progress: progress)
+                session: session, url: url, destination: destination, resumeData: nil,
+                    progress: { progress(DownloadProgress(attempt: 1, transferred: $0)) })
         } else {
             result = first
         }

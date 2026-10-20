@@ -525,7 +525,7 @@ private struct PreviewDownloader: FileDownloader {
     func download(
         from url: URL, to destination: URL, resumeData: Data?,
         recovery: @escaping @Sendable (DownloadRecovery) -> Void,
-        progress: @escaping @Sendable (TransferProgress) -> Void
+        progress: @escaping @Sendable (DownloadProgress) -> Void
     ) async throws {
         throw ExporterError.download("Previews cannot download.")
     }

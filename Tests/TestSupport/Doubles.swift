@@ -155,12 +155,12 @@ public final class MockDownloader: FileDownloader, @unchecked Sendable {
         to destination: URL,
         resumeData: Data?,
         recovery: @escaping @Sendable (DownloadRecovery) -> Void,
-        progress: @escaping @Sendable (TransferProgress) -> Void
+        progress: @escaping @Sendable (DownloadProgress) -> Void
     ) async throws {
         downloads.withLock { $0.append((url, destination)) }
         resumes.withLock { $0.append(resumeData) }
         recovery(DownloadRecovery())
-        progress(TransferProgress(bytesReceived: 50, bytesExpected: 100))
+        progress(DownloadProgress(attempt: 0, transferred: TransferProgress(bytesReceived: 50, bytesExpected: 100)))
         do {
             try await handler.current(url, destination)
         } catch {
@@ -169,7 +169,7 @@ public final class MockDownloader: FileDownloader, @unchecked Sendable {
                 resumeData: Self.token, progress: TransferProgress(bytesReceived: 50, bytesExpected: 100)))
             throw error
         }
-        progress(TransferProgress(bytesReceived: 100, bytesExpected: 100))
+        progress(DownloadProgress(attempt: 0, transferred: TransferProgress(bytesReceived: 100, bytesExpected: 100)))
     }
 }
 

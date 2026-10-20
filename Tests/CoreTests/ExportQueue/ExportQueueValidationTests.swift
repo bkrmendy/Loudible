@@ -3,9 +3,10 @@ import Testing
 import LoudibleCore
 import TestSupport
 
-// MARK: Enqueue validation
+@Suite struct ExportQueueValidationTests: ExportQueueTestCase {
+    let fixture: ExportQueueTestFixture
+    init() throws { fixture = try ExportQueueTestFixture() }
 
-extension ExportQueueTests {
     @Test func rejectsInvalidEnqueues() async throws {
         defer { cleanUp() }
         let (queue, _) = try await makeQueue()

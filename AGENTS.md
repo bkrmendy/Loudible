@@ -80,7 +80,8 @@ Fix any issues these commands surface.
 
 | Target | May use |
 | --- | --- |
-| `LoudibleCore` | Foundation only. Models, auth lifecycle, library rules, export queue, file naming. Protocols for everything external live in `Dependencies.swift` . |
+| `LoudibleScheduling` | Swift/Foundation only, no dependencies. Pure keyed admission policy. |
+| `LoudibleCore` | Foundation + LoudibleScheduling. Models, auth lifecycle, library rules, export queue, file naming. Protocols for everything external live in `Dependencies.swift` . |
 | `LoudiblePresentation` | Core + Foundation/Observation. `@Observable` view models. |
 | `LoudibleAdapters` | Core. Audible HTTP API, request signing, Keychain, URLSession downloads. |
 | `LoudibleFFmpeg` / `FFmpegBridge` (C) / `CFFmpegHeaders` | Decrypt + remux via `aex_remux_to_m4b` , wrapped by `FFmpegConverter` . |
@@ -93,7 +94,7 @@ thin wrapper that maps a view model onto it and turns actions into `Task { await
 Previews and snapshots use the content views; keep new views to that split.
 
 `check-layering.sh` fails if Core or Presentation import SwiftUI/AppKit/WebKit/UIKit/Cocoa, or if
-the manifest gives them any dependency other than Core or any build settings. Put new logic in
+the manifest gives Scheduling any dependencies, Core dependencies other than Scheduling, or Presentation dependencies other than Core, or any build settings. Put new logic in
 Core or Presentation behind a protocol, implement it in an adapter, and wire it up in
 `CompositionRoot` ( `LoudibleApp.swift` ).
 

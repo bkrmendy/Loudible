@@ -3,9 +3,10 @@ import Testing
 import LoudibleCore
 import TestSupport
 
-// MARK: Cancellation
+@Suite struct ExportQueueControlTests: ExportQueueTestCase {
+    let fixture: ExportQueueTestFixture
+    init() throws { fixture = try ExportQueueTestFixture() }
 
-extension ExportQueueTests {
     @Test func cancelStopsCurrentAndQueuedBooksButKeepsCompleted() async throws {
         defer { cleanUp() }
         let gate = AsyncGate()

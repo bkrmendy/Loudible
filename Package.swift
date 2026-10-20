@@ -19,7 +19,8 @@ let package = Package(
     ],
     targets: [
         // Business rules only: Foundation, no UI frameworks, no network/crypto/Keychain code.
-        .target(name: "LoudibleCore"),
+        .target(name: "LoudibleScheduling"),
+        .target(name: "LoudibleCore", dependencies: ["LoudibleScheduling"]),
         // Audible HTTP API, Keychain, and file downloads.
         .target(
             name: "LoudibleAdapters",
@@ -88,6 +89,7 @@ let package = Package(
             dependencies: ["LoudibleCore", "LoudiblePresentation", "LoudibleApp"],
             path: "Tests/TestSupport"
         ),
+        .testTarget(name: "SchedulingTests", dependencies: ["LoudibleScheduling"]),
         .testTarget(
             name: "CoreTests",
             dependencies: ["LoudibleCore", "TestSupport"]

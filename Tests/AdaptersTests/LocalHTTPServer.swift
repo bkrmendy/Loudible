@@ -94,7 +94,7 @@ final class LocalHTTPServer: @unchecked Sendable {
         let offset = headers["range"].flatMap { Int($0.dropFirst("bytes=".count).dropLast()) } ?? 0
         let start = min(max(0, offset), body.count)
         let status = expired ? 403 : (start > 0 ? 206 : 200)
-        let remaining = expired ? Data() : Data(body.dropFirst(start))
+        let remaining = expired ? Data("expired URL".utf8) : Data(body.dropFirst(start))
         var lines = [
             "HTTP/1.1 \(status) Test", "Content-Length: \(remaining.count)",
             "Content-Type: application/octet-stream", "Connection: close", "Accept-Ranges: bytes",

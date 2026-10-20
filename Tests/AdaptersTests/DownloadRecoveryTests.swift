@@ -16,7 +16,7 @@ import TestSupport
                 from: url, to: destination, resumeData: nil,
                 recovery: { value in saved.withLock { $0 = value } },
                 progress: { value in
-                    if value.bytesReceived > 0 { received.withLock { $0 = true } }
+                    if value.transferred.bytesReceived > 0 { received.withLock { $0 = true } }
                 })
         }
         defer { task.cancel() }
@@ -64,14 +64,21 @@ import TestSupport
         original.finishTransfers(expired: true)
         fresh.finishTransfers()
         let finalRecovery = Locked(DownloadRecovery())
+        let events = Locked<[DownloadProgress]>([])
 
         try await AlamofireFileDownloader().download(
             from: freshURL, to: destination, resumeData: saved.resumeData,
-            recovery: { value in finalRecovery.withLock { $0 = value } }, progress: { _ in })
+            recovery: { value in finalRecovery.withLock { $0 = value } },
+            progress: { value in events.withLock { $0.append(value) } })
 
         #expect(try Data(contentsOf: destination) == payload)
         #expect(original.requestCount == 2)
         #expect(fresh.requestCount == 1)
         #expect(finalRecovery.current.resumeData == nil)
+        #expect(events.current.first?.attempt == 0)
+        let fallback = events.current.filter { $0.attempt == 1 }
+        #expect(fallback.first?.transferred == TransferProgress(bytesReceived: 0, bytesExpected: 0))
+        #expect(fallback.last?.transferred == TransferProgress(bytesReceived: Int64(payload.count),
+                                                             bytesExpected: Int64(payload.count)))
     }
 }
