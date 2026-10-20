@@ -28,9 +28,11 @@ import TestSupport
 
     func manifest(_ asin: String) -> DownloadManifest {
         DownloadManifest(
-            book: Fixtures.book(asin), decryption: .aaxc(key: Data(repeating: 1, count: 16), iv: Data(repeating: 2, count: 16)),
-            chapters: [Chapter(title: "One", startMilliseconds: 0, lengthMilliseconds: 10)], downloadedAt: Fixtures.referenceDate
-        )
+            book: Fixtures.book(asin), decryption: .aaxc(
+                key: Data(repeating: 1, count: 16),
+                iv: Data(repeating: 2, count: 16)),
+            chapters: [Chapter(title: "One", startMilliseconds: 0, lengthMilliseconds: 10)],
+            downloadedAt: Fixtures.referenceDate)
     }
 
     func manifestFiles() -> [String] {
@@ -46,7 +48,9 @@ import TestSupport
         try touch("Notes [B5].txt")
         try touch("Exported [B6].m4b")
         try touch("No tag.aaxc")
-        try FileManager.default.createDirectory(at: downloads.folder.appendingPathComponent("Folder [B7].aaxc"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: downloads.folder.appendingPathComponent("Folder [B7].aaxc"),
+            withIntermediateDirectories: true)
 
         let found = downloads.scanDownloads()
         #expect(found.keys.sorted() == ["B1", "B2"])
@@ -81,7 +85,8 @@ import TestSupport
         #expect(downloads.manifests() == [manifest("B1")])
         #expect(manifestFiles() == ["B1.cover", "B1.json"])
         for name in manifestFiles() {
-            let attributes = try FileManager.default.attributesOfItem(atPath: downloads.manifestFolder.appendingPathComponent(name).path)
+            let attributes = try FileManager.default
+                .attributesOfItem(atPath: downloads.manifestFolder.appendingPathComponent(name).path)
             #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600, "\(name)")
         }
         #expect(try Data(contentsOf: #require(downloads.coverURL(for: "B1"))) == Data("png".utf8))
@@ -128,9 +133,11 @@ import TestSupport
     func partial(_ asin: String, committed: Int64 = 1, expected: Int64 = 4) -> PartialDownload {
         PartialDownload(
             book: Fixtures.book(asin), customerID: "amzn1.account.SYNTHETIC", fileExtension: "aaxc",
-            checkpoint: DownloadCheckpoint(expectedLength: expected, validator: .etag("\"e\""), committedLength: committed),
-            updatedAt: Fixtures.referenceDate
-        )
+            checkpoint: DownloadCheckpoint(
+                expectedLength: expected,
+                validator: .etag("\"e\""),
+                committedLength: committed),
+            updatedAt: Fixtures.referenceDate)
     }
 
     @Test func sweepKeepsUnfinishedDownloadsWithTheirRecord() throws {
@@ -155,7 +162,9 @@ import TestSupport
         defer { root.cleanUp() }
         try downloads.writePartialDownload(partial("B1", committed: 2))
         #expect(downloads.partialDownload(for: "B1") == partial("B1", committed: 2))
-        let mode = try FileManager.default.attributesOfItem(atPath: downloads.manifestFolder.appendingPathComponent("B1.partial").path)[.posixPermissions] as? Int
+        let mode = try FileManager.default
+            .attributesOfItem(atPath: downloads.manifestFolder.appendingPathComponent("B1.partial")
+            .path)[.posixPermissions] as? Int
         #expect(mode == 0o600)
         #expect(downloads.manifests().isEmpty)
         #expect(downloads.removeOrphanedManifests(keeping: []).isEmpty)

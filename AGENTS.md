@@ -24,7 +24,11 @@ user-facing description; read it for the export flow and FFmpeg licensing detail
 
 ## Commands
 ```sh
-Scripts/test.sh                        # the only test command: layering check, build, sandboxed tests
+Scripts/test.sh                        # the only test command: lint, layering check, build, sandboxed tests
+Scripts/lint.sh                        # strict SwiftLint check (downloads the pinned tool once)
+Scripts/format.sh                      # SwiftFormat line wrapping only (pinned, SHA-256 checked)
+Scripts/format.sh --lint               # check wrapping without changing files
+Scripts/install-hooks.sh               # enable the SwiftFormat + SwiftLint pre-commit hook
 Scripts/test.sh --filter ExportQueue   # a subset (args go to `swift test`)
 Scripts/check-layering.sh              # layering check alone
 source Scripts/env.sh && swift build   # compile check
@@ -39,8 +43,28 @@ source Scripts/env.sh && swift run Loudible   # run for development
   `TestingMacros` plugin on incremental builds.
 - Any change to packaging (`build-app.sh`, `bundle_dylibs.py`, `write-notices.py`, FFmpeg
   configure flags, linker settings, the Xcode project's build settings) must end with a passing `Scripts/verify-app.sh`.
-- There is no linter. Treat compiler warnings as the static check; `FFmpegBridge` builds with
-  `-Wall -Wextra -Werror`.
+- SwiftLint is configured in `.swiftlint.yml`; `Scripts/lint.sh` runs it with `--strict` and
+  is also run by `Scripts/test.sh` and the SwiftLint CI workflow. Its pinned, SHA-256-checked
+  binary lives in `.build/tools/`; Homebrew is not needed. Keep compiler warnings clean too;
+  `FFmpegBridge` builds with `-Wall -Wextra -Werror`.
+- After editing Swift files, run `Scripts/format.sh`, then `Scripts/lint.sh` from the repository
+  root and fix every reported violation before handing off the change. The lint script selects Xcode itself and does
+  not need `Scripts/env.sh` or an FFmpeg build. Use this wrapper rather than a globally installed
+  `swiftlint` so local checks, hooks and CI use the same version and configuration.
+- Fix the code to satisfy lint rules; do not weaken `.swiftlint.yml` or add blanket
+  `swiftlint:disable` comments to make a check pass. If a targeted suppression is necessary,
+  keep its scope minimal and explain why beside it.
+- `.swiftlint-baseline.json` records pre-existing violations. Remove entries as they are fixed;
+  do not regenerate it to suppress new violations.
+- `.swiftformat` enables only line wrapping at 120 characters. `Scripts/format.sh` applies it;
+  tests, CI and the pre-commit hook run it with `--lint`. Keep unrelated formatting rules disabled.
+- Check SwiftFormat with `Scripts/format.sh --lint`, then run SwiftLint before every commit.
+  Enable the versioned pre-commit hook with `Scripts/install-hooks.sh` once per checkout;
+  either check failing must block the commit. The hook checks formatting without rewriting files.
+
+## Feature development
+After building a feature of fixing a bug, always run test.sh, lint.sh and
+format.sh. Fix any issues these commands surface.
 
 ## Architecture and layering (enforced)
 | Target | May use |

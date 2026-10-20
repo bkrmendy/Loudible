@@ -30,7 +30,11 @@ enum LicenseRequest {
 }
 
 enum LicenseParser {
-    static func license(from data: Data, response: HTTPURLResponse, asin: String, session: AudibleSession) throws(ExporterError) -> ContentLicense {
+    static func license(
+        from data: Data,
+        response: HTTPURLResponse,
+        asin: String,
+        session: AudibleSession) throws(ExporterError) -> ContentLicense {
         let json = JSON(data: data)
         if response.statusCode == 403 || response.statusCode == 404 {
             // Audible reports ownership problems as plain HTTP errors with a message.
@@ -56,7 +60,8 @@ enum LicenseParser {
         let decryption = try ContentLicense.decryption(asin: asin, drmType: drmType, key: voucher.key, iv: voucher.iv)
 
         let metadata = license["content_metadata"]
-        guard let urlText = metadata["content_url"]["offline_url"].string, let url = URL(string: urlText), url.scheme == "https" else {
+        guard let urlText = metadata["content_url"]["offline_url"].string, let url = URL(string: urlText),
+              url.scheme == "https" else {
             throw .malformedResponse("License for \(asin) has no download URL.")
         }
         let chapterInfo = metadata["chapter_info"]
@@ -77,7 +82,10 @@ enum LicenseParser {
         var result: [Chapter] = []
         for chapter in chapters {
             if let start = chapter["start_offset_ms"].int, let length = chapter["length_ms"].int, length > 0 {
-                result.append(Chapter(title: chapter["title"].string ?? "Chapter \(result.count + 1)", startMilliseconds: start, lengthMilliseconds: length))
+                result.append(Chapter(
+                    title: chapter["title"].string ?? "Chapter \(result.count + 1)",
+                    startMilliseconds: start,
+                    lengthMilliseconds: length))
             }
             result += flatten(chapter["chapters"].array ?? [])
         }

@@ -17,7 +17,8 @@ extension BookStatus {
             [reason.localizedCaseInsensitiveContains("failed:")
                 ? reason
                 : "\(kind == .download ? "Download" : "Export") failed: \(reason)",
-             kept.map { "\($0.receivedText) of \($0.expectedText) downloaded" }].compactMap { $0 }.joined(separator: ", ")
+             kept.map { "\($0.receivedText) of \($0.expectedText) downloaded" }].compactMap { $0 }
+             .joined(separator: ", ")
         case .paused(let kept):
             "Download paused, \(kept.receivedText) of \(kept.expectedText)"
         case .downloaded:

@@ -58,7 +58,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if model.export.hasWorkSuspendLoses {
             let alert = NSAlert()
             alert.messageText = "Quit and cancel the exports and queued jobs?"
-            alert.informativeText = "Exports in progress and queued jobs are cancelled. Downloads in progress continue next time. Finished files are kept."
+            alert.informativeText = """
+            Exports in progress and queued jobs are cancelled. Downloads in progress continue next time. Finished \
+            files are kept.
+            """
             alert.addButton(withTitle: "Quit")
             alert.addButton(withTitle: "Cancel")
             guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
@@ -100,11 +103,11 @@ enum CompositionRoot {
             session: SessionViewModel(auth: auth),
             library: LibraryViewModel(service: LibraryService(api: api, auth: auth)),
             export: ExportViewModel(queue: queue, exportFolder: downloadsFolder),
-            downloads: downloads
-        )
+            downloads: downloads)
     }
 
-    /// Where downloaded `.aaxc`/`.aax` files are kept, and the exported `.m4b` next to them. Hard-coded for now; this is the one place
+    /// Where downloaded `.aaxc`/`.aax` files are kept, and the exported `.m4b` next to them. Hard-coded for now; this
+    /// is the one place
     /// to change when it becomes a setting.
     static let downloadsFolder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Loudible", isDirectory: true)

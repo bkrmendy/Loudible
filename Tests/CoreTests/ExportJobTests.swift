@@ -24,8 +24,10 @@ import TestSupport
         var job = job()
         try job.transition(to: .running(.licensing, progress: 0))
         try job.transition(to: .running(.converting, progress: 0.5))
-        #expect(throws: ExportJob.InvalidTransition.self) { try job.transition(to: .running(.downloading, progress: 1)) }
-        #expect(throws: ExportJob.InvalidTransition.self) { try job.transition(to: .running(.converting, progress: 0.4)) }
+        #expect(throws: ExportJob.InvalidTransition.self) { try job.transition(to: .running(.downloading, progress: 1))
+            }
+        #expect(throws: ExportJob.InvalidTransition.self) {
+            try job.transition(to: .running(.converting, progress: 0.4)) }
     }
 
     @Test func finishedStatesAreFinal() throws {
@@ -35,7 +37,8 @@ import TestSupport
             try job.transition(to: finished)
             #expect(job.state.isFinished)
             #expect(throws: ExportJob.InvalidTransition.self) { try job.transition(to: .queued) }
-            #expect(throws: ExportJob.InvalidTransition.self) { try job.transition(to: .running(.licensing, progress: 0)) }
+            #expect(throws: ExportJob.InvalidTransition.self) {
+                try job.transition(to: .running(.licensing, progress: 0)) }
             #expect(throws: ExportJob.InvalidTransition.self) { try job.transition(to: .cancelled) }
         }
     }
@@ -45,7 +48,8 @@ import TestSupport
         try job.transition(to: .running(.licensing, progress: 0))
         try job.transition(to: .running(.downloading, progress: 0.3))
         try job.transition(to: .waitingForAuthentication)
-        #expect(throws: ExportJob.InvalidTransition.self) { try job.transition(to: .running(.downloading, progress: 0)) }
+        #expect(throws: ExportJob.InvalidTransition.self) { try job.transition(to: .running(.downloading, progress: 0))
+            }
         try job.transition(to: .running(.licensing, progress: 0))
         #expect(job.state == .running(.licensing, progress: 0))
     }
@@ -63,7 +67,8 @@ import TestSupport
 
     @Test func queuedJobCanStartInAnyPhaseButNotComplete() throws {
         var job = job()
-        #expect(throws: ExportJob.InvalidTransition.self) { try job.transition(to: .completed(URL(fileURLWithPath: "/x"))) }
+        #expect(throws: ExportJob.InvalidTransition.self) {
+            try job.transition(to: .completed(URL(fileURLWithPath: "/x"))) }
         // An export of a kept download starts at converting.
         try job.transition(to: .running(.converting, progress: 0))
         #expect(job.firstPhase == .converting)

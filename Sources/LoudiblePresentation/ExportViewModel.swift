@@ -68,11 +68,6 @@ public final class ExportViewModel {
         isWaitingForAuthentication ? "Paused: sign in to Audible to continue." : nil
     }
 
-    /// The book's most recent job, finished or not.
-    public func latestJob(for asin: String) -> ExportJob? {
-        jobs.last { $0.book.asin == asin }
-    }
-
     // MARK: Actions
 
     /// Exports one book, whatever else is running.

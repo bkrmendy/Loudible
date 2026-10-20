@@ -4,8 +4,6 @@ import LoudibleCore
 import TestSupport
 
 @Suite struct BookStatusTests {
-    let book = Fixtures.book("B1")
-
     func job(_ kind: ExportJob.Kind, _ states: [ExportJob.State], asin: String = "B1") throws -> ExportJob {
         var job = ExportJob(book: Fixtures.book(asin), kind: kind)
         for state in states { try job.transition(to: state) }
@@ -14,15 +12,22 @@ import TestSupport
 
     func resolve(
         _ jobs: [ExportJob], failure: (kind: ExportJob.Kind, message: String)? = nil, partial: TransferProgress? = nil,
-        downloaded: Bool = false, exported: Bool = false
-    ) -> BookStatus {
-        BookStatus.resolve(asin: "B1", jobs: jobs, failure: failure, partial: partial, isDownloaded: downloaded, isExported: exported)
+        downloaded: Bool = false, exported: Bool = false) -> BookStatus {
+        BookStatus.resolve(
+            asin: "B1",
+            jobs: jobs,
+            failure: failure,
+            partial: partial,
+            isDownloaded: downloaded,
+            isExported: exported)
     }
 
     @Test func priorityRunningQueuedFailedExportedDownloaded() throws {
         let running = try job(.export, [.running(.converting, progress: 0)])
         let queued = try job(.download, [])
-        #expect(resolve([queued, running], failure: (.download, "x"), downloaded: true, exported: true) == .running(.export, progress: 0))
+        #expect(resolve([queued, running], failure: (.download, "x"), downloaded: true, exported: true) == .running(
+            .export,
+            progress: 0))
         #expect(resolve([queued], failure: (.download, "x"), downloaded: true, exported: true) == .queued(.download))
         #expect(resolve([], failure: (.download, "x"), downloaded: true, exported: true) == .failed(.download, "x"))
         #expect(resolve([], downloaded: true, exported: true) == .exported)
@@ -33,9 +38,14 @@ import TestSupport
     @Test func keptBytesShowWithAFailureOrAsPaused() throws {
         let kept = TransferProgress(bytesReceived: 3, bytesExpected: 10)
         let running = try job(.download, [.running(.downloading, progress: 0.3)])
-        #expect(resolve([running], failure: (.download, "x"), partial: kept) == .running(.download, progress: running.fractionCompleted))
+        #expect(resolve([running], failure: (.download, "x"), partial: kept) == .running(
+            .download,
+            progress: running.fractionCompleted))
         #expect(resolve([try job(.download, [])], partial: kept) == .queued(.download))
-        #expect(resolve([], failure: (.export, "x"), partial: kept, exported: true) == .failed(.export, "x", kept: kept))
+        #expect(resolve([], failure: (.export, "x"), partial: kept, exported: true) == .failed(
+            .export,
+            "x",
+            kept: kept))
         #expect(resolve([], partial: kept, exported: true) == .paused(kept))
     }
 
@@ -51,12 +61,11 @@ import TestSupport
 
     func context(
         downloaded: Bool = false, exported: Bool = false, inLibrary: Bool = true,
-        manifest: Bool = true, signedIn: Bool = true, partial: Bool = false
-    ) -> BookMenu.Context {
+        manifest: Bool = true, signedIn: Bool = true, partial: Bool = false) -> BookMenu.Context {
         BookMenu.Context(
-            isDownloaded: downloaded, isExported: exported, isInLibrary: inLibrary, hasManifest: manifest, isSignedIn: signedIn,
-            hasPartialDownload: partial
-        )
+            isDownloaded: downloaded, isExported: exported, isInLibrary: inLibrary, hasManifest: manifest,
+            isSignedIn: signedIn,
+            hasPartialDownload: partial)
     }
 
     func actions(jobs: [ExportJob] = [], _ context: BookMenu.Context) -> [BookAction] {
@@ -93,7 +102,12 @@ import TestSupport
 
     @Test func downloadedOffersExportFinderAndDelete() {
         #expect(actions(context(downloaded: true)) == [.export, .showDownload, .deleteDownload])
-        #expect(actions(context(downloaded: true, exported: true)) == [.export, .showDownload, .showExport, .deleteDownload])
+        #expect(actions(context(downloaded: true, exported: true)) == [
+            .export,
+            .showDownload,
+            .showExport,
+            .deleteDownload
+        ])
         #expect(export(context(downloaded: true))?.isEnabled == true)
     }
 

@@ -18,17 +18,25 @@ import TestSupport
         downloads = LocalDownloads(
             folder: work.url.appendingPathComponent("Downloads", isDirectory: true),
             manifestFolder: work.url.appendingPathComponent("Manifests", isDirectory: true),
-            trash: { try FileManager.default.removeItem(at: $0) }
-        )
+            trash: { try FileManager.default.removeItem(at: $0) })
         api.licenseHandler.withLock { $0 = { asin, _ in Fixtures.license(asin: asin) } }
         api.libraryHandler.withLock {
-            $0 = { _, _, marketplace, _ in LibraryPage(entries: marketplace == .us ? [Fixtures.entry("B1"), Fixtures.entry("B2")] : []) }
+            $0 = { _, _, marketplace, _ in LibraryPage(entries: marketplace == .us ? [
+                Fixtures.entry("B1"),
+                Fixtures.entry("B2")
+            ] : []) }
         }
     }
 
     func makeApp() async throws -> (AppViewModel, ExportQueue) {
         let auth = AuthenticationCoordinator(api: api, store: store, clock: TestClock())
-        let queue = ExportQueue(auth: auth, api: api, downloader: downloader, converter: converter, downloads: downloads, maximumConcurrentBooks: 1)
+        let queue = ExportQueue(
+            auth: auth,
+            api: api,
+            downloader: downloader,
+            converter: converter,
+            downloads: downloads,
+            maximumConcurrentBooks: 1)
         let app = AppViewModel(
             session: SessionViewModel(auth: auth),
             library: LibraryViewModel(service: LibraryService(api: api, auth: auth)),
@@ -73,7 +81,9 @@ import TestSupport
     @Test func cancelRemovesAllBooks() async throws {
         defer { work.cleanUp() }
         let gate = AsyncGate()
-        converter.handler.withLock { $0 = { request in await gate.wait(); try Task.checkCancellation(); try Data().write(to: request.output) } }
+        converter.handler
+            .withLock { $0 = { request in
+            await gate.wait(); try Task.checkCancellation(); try Data().write(to: request.output) } }
         let (app, queue) = try await makeApp()
         await exportAll(app)
         try await waitUntil { converter.requests.current.count == 1 }
@@ -126,7 +136,8 @@ import TestSupport
             }
         }
         api.refreshHandler.withLock { $0 = { _ in throw ExporterError.authenticationRequired } }
-        api.registerHandler.withLock { $0 = { _, _ in renewed.withLock { $0 = true }; return Fixtures.session(accessToken: "fresh") } }
+        api.registerHandler
+            .withLock { $0 = { _, _ in renewed.withLock { $0 = true }; return Fixtures.session(accessToken: "fresh") } }
         let (app, queue) = try await makeApp()
         await app.export.exportOne(app.library.books[0])
 
@@ -152,14 +163,20 @@ import TestSupport
         #expect(app.library.selection.isEmpty)
         #expect(!app.library.canRefresh)
     }
+}
 
-    // MARK: Downloads
+// MARK: Downloads
 
+extension ExportViewModelTests {
     /// A download as an earlier run left it: the audio file and its manifest.
     func keepDownload(_ book: Audiobook) throws {
         try downloads.ensureFolder()
         try Data("enc".utf8).write(to: downloads.folder.appendingPathComponent("\(book.title) [\(book.asin)].aaxc"))
-        try downloads.writeManifest(DownloadManifest(book: book, decryption: Fixtures.license(asin: book.asin).decryption, chapters: [], downloadedAt: Fixtures.referenceDate))
+        try downloads.writeManifest(DownloadManifest(
+            book: book,
+            decryption: Fixtures.license(asin: book.asin).decryption,
+            chapters: [],
+            downloadedAt: Fixtures.referenceDate))
     }
 
     @Test func downloadedBooksThatLeftTheLibraryStayVisible() async throws {
@@ -247,12 +264,16 @@ import TestSupport
 
     @Test func failureStaysUntilTheNextAttempt() async throws {
         defer { work.cleanUp() }
-        api.licenseHandler.withLock { $0 = { asin, _ in throw ExporterError.licenseDenied(asin: asin, reason: "not owned") } }
+        api.licenseHandler.withLock { $0 = { asin, _ in throw ExporterError.licenseDenied(
+            asin: asin,
+            reason: "not owned") } }
         let (app, queue) = try await makeApp()
         let book = app.library.books[0]
         await app.export.download([book])
         await queue.waitUntilFinished()
-        try await waitUntil { await app.status(for: book) == .failed(.download, "The download license was denied: not owned") }
+        try await waitUntil { await app.status(for: book) == .failed(
+            .download,
+            "The download license was denied: not owned") }
 
         // Another book's run drops the finished job from the queue; the failure stays.
         await app.export.download([app.library.books[1]])
@@ -303,7 +324,9 @@ import TestSupport
         #expect(!app.hasActiveJobs)
         #expect(!app.session.isSignedIn)
         #expect(downloads.scanDownloads().keys.sorted() == ["B1"])
-        #expect(app.partialDownloads == ["B2": TransferProgress(bytesReceived: 3, bytesExpected: downloader.expectedLength)])
+        #expect(app.partialDownloads == ["B2": TransferProgress(
+            bytesReceived: 3,
+            bytesExpected: downloader.expectedLength)])
         try await waitUntil { await app.library.books.isEmpty }
 
         downloader.handler.withLock { $0 = { _, destination in try Data("encrypted".utf8).write(to: destination) } }
@@ -336,7 +359,10 @@ import TestSupport
         let (app, queue) = try await makeApp()
         await queue.waitUntilFinished()
         try await waitUntil { await app.downloadedFiles.keys.sorted() == ["B1"] }
-        #expect(downloader.resumes.current == [ResumePoint(committedLength: 3, expectedLength: 9, validator: MockDownloader.validator)])
+        #expect(downloader.resumes.current == [ResumePoint(
+            committedLength: 3,
+            expectedLength: 9,
+            validator: MockDownloader.validator)])
         #expect(downloads.partialDownloads().isEmpty)
         #expect(app.partialDownloads.isEmpty)
         #expect(app.status(for: app.library.books[1]) == .none)
@@ -377,7 +403,8 @@ import TestSupport
         await app.export.download([book])
         await queue.waitUntilFinished()
         let kept = TransferProgress(bytesReceived: 3, bytesExpected: downloader.expectedLength)
-        try await waitUntil { await app.status(for: book) == .failed(.download, "Download failed: HTTP 500", kept: kept) }
+        try await waitUntil {
+            await app.status(for: book) == .failed(.download, "Download failed: HTTP 500", kept: kept) }
         #expect(app.menuItems(for: book).map(\.action) == [.resumeDownload, .export, .deleteDownload])
         #expect(app.selectedBooks(offering: .download).isEmpty)
         app.library.toggleSelection(book.asin)

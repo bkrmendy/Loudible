@@ -19,7 +19,10 @@ import TestSupport
     }
 
     @Test func excludesPodcasts() {
-        #expect(LibraryRules.exclusion(for: Fixtures.entry("B1", deliveryType: "PodcastEpisode", contentType: "Podcast")) == .podcast)
+        #expect(LibraryRules.exclusion(for: Fixtures.entry(
+            "B1",
+            deliveryType: "PodcastEpisode",
+            contentType: "Podcast")) == .podcast)
         #expect(LibraryRules.exclusion(for: Fixtures.entry("B1", contentType: "Podcast")) == .podcast)
         #expect(LibraryRules.exclusion(for: Fixtures.entry("B1", relationships: [
             ProductRelationship(asin: "P1", direction: .parent, type: "Episode"),
@@ -67,12 +70,18 @@ import TestSupport
 
     func script(_ pages: [[LibraryEntry]], totalCount: Int? = nil) {
         api.libraryHandler.withLock {
-            $0 = { number, _, _, _ in LibraryPage(entries: number <= pages.count ? pages[number - 1] : [], totalCount: totalCount) }
+            $0 = { number, _, _, _ in LibraryPage(
+                entries: number <= pages.count ? pages[number - 1] : [],
+                totalCount: totalCount) }
         }
     }
 
     @Test func fetchesAllPagesUntilShortPage() async throws {
-        script([[Fixtures.entry("B1"), Fixtures.entry("B2")], [Fixtures.entry("B3"), Fixtures.entry("B4")], [Fixtures.entry("B5")]])
+        script([
+            [Fixtures.entry("B1"), Fixtures.entry("B2")],
+            [Fixtures.entry("B3"), Fixtures.entry("B4")],
+            [Fixtures.entry("B5")]
+        ])
         let books = try await service(pageSize: 2).fetchPurchasedBooks(in: .us)
         #expect(books.map(\.asin) == ["B1", "B2", "B3", "B4", "B5"])
         #expect(api.requestedPages.current == [1, 2, 3])
@@ -85,7 +94,9 @@ import TestSupport
     }
 
     @Test func totalCountStopsAfterLastFullPage() async throws {
-        script([[Fixtures.entry("B1"), Fixtures.entry("B2")], [Fixtures.entry("B3"), Fixtures.entry("B4")]], totalCount: 4)
+        script(
+            [[Fixtures.entry("B1"), Fixtures.entry("B2")], [Fixtures.entry("B3"), Fixtures.entry("B4")]],
+            totalCount: 4)
         let books = try await service(pageSize: 2).fetchPurchasedBooks(in: .us)
         #expect(books.count == 4)
         #expect(api.requestedPages.current == [1, 2])
@@ -106,7 +117,11 @@ import TestSupport
     }
 
     @Test func overlappingPagesAreDeduplicated() async throws {
-        script([[Fixtures.entry("B1"), Fixtures.entry("B2")], [Fixtures.entry("B2"), Fixtures.entry("B3")], [Fixtures.entry("B4")]])
+        script([
+            [Fixtures.entry("B1"), Fixtures.entry("B2")],
+            [Fixtures.entry("B2"), Fixtures.entry("B3")],
+            [Fixtures.entry("B4")]
+        ])
         let books = try await service(pageSize: 2).fetchPurchasedBooks(in: .us)
         #expect(books.map(\.asin) == ["B1", "B2", "B3", "B4"])
     }
@@ -173,7 +188,8 @@ import TestSupport
     func script(_ libraries: [Marketplace: [String]]) {
         api.libraryHandler.withLock {
             $0 = { _, _, marketplace, _ in
-                LibraryPage(entries: (libraries[marketplace] ?? []).map { Fixtures.entry($0, marketplace: marketplace) })
+                LibraryPage(entries: (libraries[marketplace] ?? [])
+                    .map { Fixtures.entry($0, marketplace: marketplace) })
             }
         }
     }
@@ -202,7 +218,9 @@ import TestSupport
         let others = Marketplace.all.filter { $0 != .us }
         #expect(result.map(\.marketplace) == others)
         #expect(api.requestedMarketplaces.current == others)
-        #expect(result[0] == .titles(.uk, [Fixtures.book("K1", marketplace: .uk), Fixtures.book("K2", marketplace: .uk)]))
+        #expect(result[0] == .titles(
+            .uk,
+            [Fixtures.book("K1", marketplace: .uk), Fixtures.book("K2", marketplace: .uk)]))
         #expect(result.last == .titles(.japan, [Fixtures.book("J1", marketplace: .japan)]))
         #expect(result[1] == .empty(.germany))
     }
@@ -241,7 +259,9 @@ import TestSupport
 
     @Test func expiredTokenIsRefreshedOnceForAllStores() async throws {
         clock.advance(by: 3600)
-        api.refreshHandler.withLock { $0 = { _ in Fixtures.session(accessToken: "new", expiresAt: Fixtures.referenceDate.addingTimeInterval(7200)) } }
+        api.refreshHandler.withLock { $0 = { _ in Fixtures.session(
+            accessToken: "new",
+            expiresAt: Fixtures.referenceDate.addingTimeInterval(7200)) } }
         let tokens = Locked<[String]>([])
         api.libraryHandler.withLock {
             $0 = { _, _, _, session in
@@ -278,9 +298,25 @@ import TestSupport
 
 @Suite struct LibrarySearchTests {
     let books = [
-        Audiobook(asin: "B1", marketplace: .us, title: "Les Misérables", authors: ["Victor Hugo"], narrators: ["Narrator One"]),
-        Audiobook(asin: "B2", marketplace: .us, title: "Dune", subtitle: "Book One", authors: ["Frank Herbert"], seriesTitle: "Dune Chronicles"),
-        Audiobook(asin: "B3", marketplace: .us, title: "Project Hail Mary", authors: ["Andy Weir"], narrators: ["Ray Porter"]),
+        Audiobook(
+            asin: "B1",
+            marketplace: .us,
+            title: "Les Misérables",
+            authors: ["Victor Hugo"],
+            narrators: ["Narrator One"]),
+        Audiobook(
+            asin: "B2",
+            marketplace: .us,
+            title: "Dune",
+            subtitle: "Book One",
+            authors: ["Frank Herbert"],
+            seriesTitle: "Dune Chronicles"),
+        Audiobook(
+            asin: "B3",
+            marketplace: .us,
+            title: "Project Hail Mary",
+            authors: ["Andy Weir"],
+            narrators: ["Ray Porter"]),
     ]
 
     @Test func emptyQueryReturnsEverything() {

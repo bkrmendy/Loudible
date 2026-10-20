@@ -43,11 +43,12 @@ public enum ExportFileNaming {
 
     /// The first `fileName(base:attempt:extension:)` in `directory` for which `exists` is false.
     public static func availableURL(
-        in directory: URL, base: String, extension ext: String = fileExtension, exists: (URL) -> Bool
-    ) -> URL {
+        in directory: URL, base: String, extension ext: String = fileExtension, exists: (URL) -> Bool) -> URL {
         var attempt = 1
         while true {
-            let url = directory.appendingPathComponent(fileName(base: base, attempt: attempt, extension: ext), isDirectory: false)
+            let url = directory.appendingPathComponent(
+                fileName(base: base, attempt: attempt, extension: ext),
+                isDirectory: false)
             if !exists(url) { return url }
             attempt += 1
         }

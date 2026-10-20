@@ -24,7 +24,6 @@ public final class TestClock: WallClock, @unchecked Sendable {
 
     public func now() -> Date { date.current }
     public func advance(by interval: TimeInterval) { date.withLock { $0.addTimeInterval(interval) } }
-    public func set(_ newDate: Date) { date.withLock { $0 = newDate } }
 }
 
 /// Deterministic randomness: bytes count up from `seed`, UUIDs are sequential.
@@ -119,13 +118,20 @@ public final class MockAudibleAPI: AudibleAPI, @unchecked Sendable {
         return try await refreshHandler.current(session)
     }
 
-    public func libraryPage(_ number: Int, pageSize: Int, marketplace: Marketplace, session: AudibleSession) async throws -> LibraryPage {
+    public func libraryPage(
+        _ number: Int,
+        pageSize: Int,
+        marketplace: Marketplace,
+        session: AudibleSession) async throws -> LibraryPage {
         requestedPages.withLock { $0.append(number) }
         requestedMarketplaces.withLock { $0.append(marketplace) }
         return try await libraryHandler.current(number, pageSize, marketplace, session)
     }
 
-    public func license(for asin: String, marketplace: Marketplace, session: AudibleSession) async throws -> ContentLicense {
+    public func license(
+        for asin: String,
+        marketplace: Marketplace,
+        session: AudibleSession) async throws -> ContentLicense {
         requestedLicenses.withLock { $0.append(asin) }
         requestedLicenseMarketplaces.withLock { $0.append(marketplace) }
         return try await licenseHandler.current(asin, session)
@@ -159,7 +165,10 @@ public final class MockDownloader: FileDownloader, @unchecked Sendable {
         resumes.withLock { $0.append(resume) }
         func report() {
             let size = (try? FileManager.default.attributesOfItem(atPath: destination.path))?[.size] as? Int64 ?? 0
-            checkpoint(DownloadCheckpoint(expectedLength: expectedLength, validator: Self.validator, committedLength: size))
+            checkpoint(DownloadCheckpoint(
+                expectedLength: expectedLength,
+                validator: Self.validator,
+                committedLength: size))
         }
         report()
         progress(TransferProgress(bytesReceived: 50, bytesExpected: 100))

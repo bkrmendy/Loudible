@@ -104,7 +104,8 @@ struct AccountPopoverContent: View {
                     }
                 }
                 if !otherMarketplaces.isEmpty {
-                    Text("Also has titles in " + otherMarketplaces.map { "\($0.marketplace.name) (\($0.count))" }.joined(separator: ", "))
+                    Text("Also has titles in " + otherMarketplaces.map { "\($0.marketplace.name) (\($0.count))" }
+                        .joined(separator: ", "))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

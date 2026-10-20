@@ -92,11 +92,6 @@ public actor AuthenticationCoordinator {
         }
     }
 
-    /// The pending sign-in, if the browser is expected to deliver a callback.
-    public var pendingLogin: PendingLogin? {
-        if case .awaitingCallback(let login) = state { login } else { nil }
-    }
-
     /// Validates the redirect URL and registers the device.
     ///
     /// A malformed URL leaves the sign-in pending so a corrected URL can be pasted. Once a

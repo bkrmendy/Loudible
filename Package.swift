@@ -66,8 +66,16 @@ let package = Package(
             // the app in compatibility mode with the pre-macOS 26 design: an opaque title bar and
             // a flat sidebar instead of Liquid Glass. Record SDK 26 so the app gets the current
             // system design. Xcode builds against the real SDK and does not need this.
-            linkerSettings: [.unsafeFlags(["-Xlinker", "-platform_version", "-Xlinker", "macos", "-Xlinker", "14.0", "-Xlinker", "26.0"])]
-        ),
+            linkerSettings: [.unsafeFlags([
+                "-Xlinker",
+                "-platform_version",
+                "-Xlinker",
+                "macos",
+                "-Xlinker",
+                "14.0",
+                "-Xlinker",
+                "26.0"
+            ])]),
 
         .target(
             name: "TestSupport",

@@ -33,7 +33,10 @@ public enum Snapshot {
     public struct UnknownStates: Error, CustomStringConvertible {
         public let names: [String]
         public var description: String {
-            "Unknown preview states: \(names.joined(separator: ", ")). Valid: \(PreviewState.allCases.map(\.rawValue).joined(separator: ", "))"
+            """
+            Unknown preview states: \(names.joined(separator: ", ")). Valid: \
+            \(PreviewState.allCases.map(\.rawValue).joined(separator: ", "))
+            """
         }
     }
 
@@ -42,7 +45,11 @@ public enum Snapshot {
         let isWindow = state.rawValue.hasPrefix("window")
         // Whole-window states get the real window chrome and toolbar; components a plain window.
         let style: NSWindow.StyleMask = isWindow ? [.titled, .closable, .resizable, .fullSizeContentView] : [.titled]
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: style, backing: .buffered, defer: false)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: style,
+            backing: .buffered,
+            defer: false)
         // Closing must not release the window a second time; Swift owns it.
         window.isReleasedWhenClosed = false
         window.title = "Loudible"

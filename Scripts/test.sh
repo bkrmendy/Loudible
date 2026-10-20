@@ -3,7 +3,7 @@
 #
 #   Scripts/test.sh [swift test arguments, e.g. --filter LibraryTests]
 #
-# 1. Checks that Core and Presentation do not import UI frameworks.
+# 1. Lints Swift and checks that Core and Presentation do not import UI frameworks.
 # 2. Builds the package and tests (network allowed, for package resolution).
 # 3. Runs the tests inside a sandbox that denies all non-loopback network traffic,
 #    so a test that accidentally contacts Audible fails instead of reaching it.
@@ -13,9 +13,6 @@ set -m # background jobs get their own process group, so a timeout kills the who
 
 cd "$(dirname "$0")/.."
 TIMEOUT="${TEST_TIMEOUT:-900}"
-Scripts/build-ffmpeg.sh   # may download, so it runs before the network sandbox
-source Scripts/env.sh
-
 with_timeout() {
     "$@" &
     local pid=$!
@@ -29,6 +26,10 @@ with_timeout() {
     return "$status"
 }
 
+with_timeout Scripts/format.sh --lint
+with_timeout Scripts/lint.sh
+Scripts/build-ffmpeg.sh   # may download, so it runs before the network sandbox
+source Scripts/env.sh
 Scripts/check-layering.sh
 
 # Incremental builds with Swift 6.4 (Xcode 27 and the Command Line Tools alike) can lose the Swift Testing macro

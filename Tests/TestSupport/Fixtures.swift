@@ -43,13 +43,22 @@ public enum Fixtures {
     }
 
     public static func callbackURL(marketplace: Marketplace = .us, code: String = "synthetic-code") -> URL {
-        URL(string: "https://\(marketplace.amazonHost)/ap/maplanding?openid.assoc_handle=amzn_audible_ios_us&openid.oa2.authorization_code=\(code)")!
+        URL(
+            string: """
+            https://\(marketplace.amazonHost)/ap/maplanding?openid.assoc_handle=amzn_audible_ios_us\
+            &openid.oa2.authorization_code=\(code)
+            """)!
     }
 
     public static func book(
-        _ asin: String, title: String? = nil, authors: [String] = ["Author A"], marketplace: Marketplace = .us
-    ) -> Audiobook {
-        Audiobook(asin: asin, marketplace: marketplace, title: title ?? "Book \(asin)", authors: authors, narrators: ["Narrator N"])
+        _ asin: String, title: String? = nil, authors: [String] = ["Author A"],
+        marketplace: Marketplace = .us) -> Audiobook {
+        Audiobook(
+            asin: asin,
+            marketplace: marketplace,
+            title: title ?? "Book \(asin)",
+            authors: authors,
+            narrators: ["Narrator N"])
     }
 
     public static func entry(

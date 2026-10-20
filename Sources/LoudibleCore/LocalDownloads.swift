@@ -18,8 +18,9 @@ public struct LocalDownloads: Sendable {
     public init(
         folder: URL,
         manifestFolder: URL,
-        trash: @escaping @Sendable (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
-    ) {
+        trash: @escaping @Sendable (URL) throws -> Void = { try FileManager.default.trashItem(
+            at: $0,
+            resultingItemURL: nil) }) {
         self.folder = folder
         self.manifestFolder = manifestFolder
         self.trash = trash
@@ -118,10 +119,10 @@ public struct LocalDownloads: Sendable {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let temporary = manifestFolder.appendingPathComponent(".\(destination.lastPathComponent).\(UUID().uuidString).tmp")
+        let temporary = manifestFolder
+            .appendingPathComponent(".\(destination.lastPathComponent).\(UUID().uuidString).tmp")
         guard fileManager.createFile(
-            atPath: temporary.path, contents: try encoder.encode(value), attributes: [.posixPermissions: 0o600]
-        ) else {
+            atPath: temporary.path, contents: try encoder.encode(value), attributes: [.posixPermissions: 0o600]) else {
             throw ExporterError.fileSystem("Could not write \(temporary.path).")
         }
         try replace(destination, with: temporary)
@@ -197,7 +198,8 @@ public struct LocalDownloads: Sendable {
         for name in names where ExportFileNaming.isPartial(name) && !kept.contains(name) {
             try? fileManager.removeItem(at: folder.appendingPathComponent(name))
         }
-        let hidden = ((try? fileManager.contentsOfDirectory(atPath: manifestFolder.path)) ?? []).filter { $0.hasPrefix(".") }
+        let hidden = ((try? fileManager.contentsOfDirectory(atPath: manifestFolder.path)) ?? [])
+            .filter { $0.hasPrefix(".") }
         for name in hidden where name.hasSuffix(".cover") || name.hasSuffix(".tmp") {
             try? fileManager.removeItem(at: manifestFolder.appendingPathComponent(name))
         }
@@ -246,7 +248,8 @@ public struct LocalDownloads: Sendable {
     public func partialProgress(for record: PartialDownload) -> TransferProgress? {
         let expected = record.checkpoint.expectedLength
         guard expected > 0,
-              let size = (try? fileManager.attributesOfItem(atPath: partialFileURL(for: record.book.asin).path))?[.size] as? Int64
+              let size = (try? fileManager
+              .attributesOfItem(atPath: partialFileURL(for: record.book.asin).path))?[.size] as? Int64
         else { return nil }
         return TransferProgress(bytesReceived: min(size, expected), bytesExpected: expected)
     }

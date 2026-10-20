@@ -62,7 +62,8 @@ public struct ExportJob: Sendable, Identifiable, Equatable {
     }
 
     /// - Parameter transferred: the byte count behind a `.downloading` state; ignored otherwise.
-    public mutating func transition(to newState: State, transferred: TransferProgress? = nil) throws(InvalidTransition) {
+    public mutating func transition(to newState: State,
+                                    transferred: TransferProgress? = nil) throws(InvalidTransition) {
         guard Self.allows(from: state, to: newState) else {
             throw InvalidTransition(from: state, to: newState)
         }
@@ -116,9 +117,29 @@ public struct ExportJob: Sendable, Identifiable, Equatable {
         }
     }
 
-    private static let exportPhaseWeight: [Phase: Double] = [.licensing: 0.02, .downloading: 0.58, .converting: 0.38, .finalizing: 0.02]
-    private static let exportPhaseStart: [Phase: Double] = [.licensing: 0, .downloading: 0.02, .converting: 0.60, .finalizing: 0.98]
+    private static let exportPhaseWeight: [Phase: Double] = [
+        .licensing: 0.02,
+        .downloading: 0.58,
+        .converting: 0.38,
+        .finalizing: 0.02
+    ]
+    private static let exportPhaseStart: [Phase: Double] = [
+        .licensing: 0,
+        .downloading: 0.02,
+        .converting: 0.60,
+        .finalizing: 0.98
+    ]
     // A download never converts; `.converting` is given no weight.
-    private static let downloadPhaseWeight: [Phase: Double] = [.licensing: 0.02, .downloading: 0.96, .converting: 0, .finalizing: 0.02]
-    private static let downloadPhaseStart: [Phase: Double] = [.licensing: 0, .downloading: 0.02, .converting: 0.98, .finalizing: 0.98]
+    private static let downloadPhaseWeight: [Phase: Double] = [
+        .licensing: 0.02,
+        .downloading: 0.96,
+        .converting: 0,
+        .finalizing: 0.02
+    ]
+    private static let downloadPhaseStart: [Phase: Double] = [
+        .licensing: 0,
+        .downloading: 0.02,
+        .converting: 0.98,
+        .finalizing: 0.98
+    ]
 }

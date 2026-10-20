@@ -1,0 +1,11 @@
+# Keep formatting limited to line wrapping; SwiftLint owns the other style rules.
+--rules wrap,wrapSingleLineComments,wrapSingleLineStrings
+--max-width 120
+--indent 4
+--swift-version 6
+--exclude .build,build,Vendor
+--closing-paren same-line
+# Preserve existing list layout when wrapping; avoid reformatting short argument lists.
+--wrap-arguments disabled
+--wrap-parameters disabled
+--wrap-collections disabled

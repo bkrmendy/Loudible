@@ -1,0 +1,25 @@
+baseline: .swiftlint-baseline.json
+
+# Analyzer rules run only through Scripts/dead-code.sh, not the regular lint check.
+analyzer_rules:
+  - unused_declaration
+
+unused_declaration:
+  include_public_and_open: true
+
+included:
+  - Package.swift
+  - Sources
+  - Tests
+  - App/Loudible
+
+excluded:
+  - .build
+  - build
+  - Vendor
+
+# Match the existing compact SwiftUI views, descriptive test names, and trailing commas.
+disabled_rules:
+  - identifier_name
+  - trailing_comma
+

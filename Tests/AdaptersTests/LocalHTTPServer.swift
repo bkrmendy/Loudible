@@ -91,9 +91,14 @@ final class LocalHTTPServer: @unchecked Sendable {
             let buffer = buffer + (data ?? Data())
             if let end = buffer.range(of: Data("\r\n\r\n".utf8)) {
                 var headers: [String: String] = [:]
-                for line in String(decoding: buffer[..<end.lowerBound], as: UTF8.self).components(separatedBy: "\r\n").dropFirst() {
+                guard let request = String(bytes: buffer[..<end.lowerBound], encoding: .utf8) else {
+                    connection.cancel()
+                    return
+                }
+                for line in request.components(separatedBy: "\r\n").dropFirst() {
                     guard let colon = line.firstIndex(of: ":") else { continue }
-                    headers[line[..<colon].lowercased()] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+                    headers[line[..<colon].lowercased()] = line[line.index(after: colon)...]
+                        .trimmingCharacters(in: .whitespaces)
                 }
                 self.receivedHeaders.append(headers)
                 self.respond(on: connection, headers: headers)
@@ -105,10 +110,15 @@ final class LocalHTTPServer: @unchecked Sendable {
 
     private func respond(on connection: NWConnection, headers: [String: String]) {
         func head(_ status: Int, length: Int, extra: [String] = []) -> Data {
-            let lines = ["HTTP/1.1 \(status) Test", "Content-Length: \(length)", "Content-Type: application/octet-stream", "Connection: close"] + extra
+            let lines = [
+                "HTTP/1.1 \(status) Test",
+                "Content-Length: \(length)",
+                "Content-Type: application/octet-stream",
+                "Connection: close"
+            ] + extra
             return Data((lines.joined(separator: "\r\n") + "\r\n\r\n").utf8)
         }
-        func sendAndClose(_ data: Data) {
+        @Sendable func sendAndClose(_ data: Data) {
             connection.send(content: data, isComplete: true, completion: .contentProcessed { _ in connection.cancel() })
         }
         /// Closing right after the bytes would make URLSession drop them unseen; a real
@@ -120,7 +130,8 @@ final class LocalHTTPServer: @unchecked Sendable {
         }
         switch reply {
         case .file(let file):
-            let validators = [file.etag.map { "ETag: \($0)" }, file.lastModified.map { "Last-Modified: \($0)" }].compactMap { $0 }
+            let validators = [file.etag.map { "ETag: \($0)" }, file.lastModified.map { "Last-Modified: \($0)" }]
+                .compactMap { $0 }
             var start = 0
             if let range = headers["range"], range.hasPrefix("bytes="), range.hasSuffix("-"),
                let offset = Int(range.dropFirst("bytes=".count).dropLast()) {
@@ -145,14 +156,20 @@ final class LocalHTTPServer: @unchecked Sendable {
                 sendAndClose(head + body)
             }
         case .body(let body):
-            connection.send(content: head(200, length: body.count) + body, isComplete: true, completion: .contentProcessed { _ in
+            connection.send(
+                content: head(200, length: body.count) + body,
+                isComplete: true,
+                completion: .contentProcessed { _ in
                 connection.cancel()
             })
         case .truncated(let body, let declaredLength):
             sendThenDrop(head(200, length: declaredLength) + body)
         case .status(let status):
             let body = Data("error \(status)".utf8)
-            connection.send(content: head(status, length: body.count) + body, isComplete: true, completion: .contentProcessed { _ in
+            connection.send(
+                content: head(status, length: body.count) + body,
+                isComplete: true,
+                completion: .contentProcessed { _ in
                 connection.cancel()
             })
         case .stall(let body, let declaredLength):

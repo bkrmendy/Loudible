@@ -100,6 +100,12 @@ public struct RequestSigner {
 
 /// Minimal DER reader for unwrapping a PKCS#8 RSA key.
 enum DER {
+    private struct Element {
+        let tag: UInt8
+        let contentStart: Int
+        let end: Int
+    }
+
     /// PrivateKeyInfo ::= SEQUENCE { version INTEGER, algorithm SEQUENCE, privateKey OCTET STRING, ... }
     static func pkcs1FromPKCS8(_ data: Data) -> Data? {
         let bytes = [UInt8](data)
@@ -113,7 +119,7 @@ enum DER {
         return Data(bytes[key.contentStart..<key.end])
     }
 
-    private static func element(in bytes: [UInt8], at offset: Int) -> (tag: UInt8, contentStart: Int, end: Int)? {
+    private static func element(in bytes: [UInt8], at offset: Int) -> Element? {
         guard offset + 2 <= bytes.count else { return nil }
         let tag = bytes[offset]
         var length = Int(bytes[offset + 1])
@@ -126,6 +132,6 @@ enum DER {
         }
         let end = contentStart + length
         guard end <= bytes.count else { return nil }
-        return (tag, contentStart, end)
+        return Element(tag: tag, contentStart: contentStart, end: end)
     }
 }

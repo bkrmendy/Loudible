@@ -25,7 +25,11 @@ public final class AppViewModel {
     @ObservationIgnored private var lastSessionDevice: DeviceIdentity?
     @ObservationIgnored private var started = false
 
-    public init(session: SessionViewModel, library: LibraryViewModel, export: ExportViewModel, downloads: LocalDownloads) {
+    public init(
+        session: SessionViewModel,
+        library: LibraryViewModel,
+        export: ExportViewModel,
+        downloads: LocalDownloads) {
         self.session = session
         self.library = library
         self.export = export

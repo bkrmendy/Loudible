@@ -55,7 +55,10 @@ public struct KeychainCredentialStore: CredentialStore {
     private let service: String
     private let account: String
 
-    public init(keychain: any KeychainServices = SystemKeychain(), service: String = defaultService, account: String = "default") {
+    public init(
+        keychain: any KeychainServices = SystemKeychain(),
+        service: String = defaultService,
+        account: String = "default") {
         self.keychain = keychain
         self.service = service
         self.account = account

@@ -13,7 +13,10 @@ public struct AudibleLoginFactory: Sendable {
         public static let bundleID = "com.audible.iphone"
         public static let appID = "MAPiOSLib/6.0/ToHideRetailLink"
         public static let webUserAgent =
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+            """
+            Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) \
+            Mobile/15E148
+            """
         public static let apiUserAgent = "AmazonWebView/Audible/\(version)/iOS/\(osVersion)/iPhone"
     }
 
@@ -34,11 +37,13 @@ public struct AudibleLoginFactory: Sendable {
             marketplace: marketplace,
             device: device,
             codeVerifier: verifier,
-            loginURL: Self.loginURL(marketplace: marketplace, device: device, codeChallenge: PKCE.codeChallenge(for: verifier)),
+            loginURL: Self.loginURL(
+                marketplace: marketplace,
+                device: device,
+                codeChallenge: PKCE.codeChallenge(for: verifier)),
             cookies: initialCookies(marketplace: marketplace),
             userAgent: App.webUserAgent,
-            createdAt: clock.now()
-        )
+            createdAt: clock.now())
     }
 
     static func loginURL(marketplace: Marketplace, device: DeviceIdentity, codeChallenge: String) -> URL {

@@ -22,7 +22,11 @@ public struct AudibleHTTPAPI: AudibleAPI {
     public func register(_ login: PendingLogin, authorizationCode: String) async throws -> AudibleSession {
         let request = try DeviceRegistration.request(for: login, authorizationCode: authorizationCode)
         let (data, response) = try await send(request)
-        return try DeviceRegistration.session(from: data, status: response.statusCode, login: login, receivedAt: clock.now())
+        return try DeviceRegistration.session(
+            from: data,
+            status: response.statusCode,
+            login: login,
+            receivedAt: clock.now())
     }
 
     // MARK: Token refresh
@@ -30,7 +34,11 @@ public struct AudibleHTTPAPI: AudibleAPI {
     public func refresh(_ session: AudibleSession) async throws -> AudibleSession {
         let request = TokenRefresh.request(for: session)
         let (data, response) = try await send(request)
-        return try TokenRefresh.session(byApplying: data, status: response.statusCode, to: session, receivedAt: clock.now())
+        return try TokenRefresh.session(
+            byApplying: data,
+            status: response.statusCode,
+            to: session,
+            receivedAt: clock.now())
     }
 
     // MARK: Library and licenses
@@ -38,13 +46,22 @@ public struct AudibleHTTPAPI: AudibleAPI {
     // Signing covers method, path, query, date and body but not the host, so the session's
     // device key signs requests to any store.
 
-    public func libraryPage(_ number: Int, pageSize: Int, marketplace: Marketplace, session: AudibleSession) async throws -> LibraryPage {
-        let request = try signed(LibraryRequest.request(page: number, pageSize: pageSize, marketplace: marketplace), session: session)
+    public func libraryPage(
+        _ number: Int,
+        pageSize: Int,
+        marketplace: Marketplace,
+        session: AudibleSession) async throws -> LibraryPage {
+        let request = try signed(
+            LibraryRequest.request(page: number, pageSize: pageSize, marketplace: marketplace),
+            session: session)
         let (data, response) = try await send(request)
         return try LibraryParser.page(from: data, response: response, marketplace: marketplace)
     }
 
-    public func license(for asin: String, marketplace: Marketplace, session: AudibleSession) async throws -> ContentLicense {
+    public func license(
+        for asin: String,
+        marketplace: Marketplace,
+        session: AudibleSession) async throws -> ContentLicense {
         let unsigned: URLRequest
         do {
             unsigned = try LicenseRequest.request(asin: asin, marketplace: marketplace)
@@ -123,7 +140,11 @@ enum DeviceRegistration {
         return request
     }
 
-    static func session(from data: Data, status: Int, login: PendingLogin, receivedAt now: Date) throws(ExporterError) -> AudibleSession {
+    static func session(
+        from data: Data,
+        status: Int,
+        login: PendingLogin,
+        receivedAt now: Date) throws(ExporterError) -> AudibleSession {
         let json = JSON(data: data)
         guard (200..<300).contains(status) else {
             let error = json["response"]["error"]
@@ -178,16 +199,24 @@ enum TokenRefresh {
         var request = URLRequest(url: URL(string: "https://\(session.marketplace.amazonAPIHost)/auth/token")!)
         request.httpMethod = "POST"
         request.httpBody = Data(FormEncoding.encode(components.queryItems!).utf8)
-        AmazonAuthHeaders.apply(to: &request, marketplace: session.marketplace, contentType: "application/x-www-form-urlencoded")
+        AmazonAuthHeaders.apply(
+            to: &request,
+            marketplace: session.marketplace,
+            contentType: "application/x-www-form-urlencoded")
         return request
     }
 
-    static func session(byApplying data: Data, status: Int, to session: AudibleSession, receivedAt now: Date) throws(ExporterError) -> AudibleSession {
+    static func session(
+        byApplying data: Data,
+        status: Int,
+        to session: AudibleSession,
+        receivedAt now: Date) throws(ExporterError) -> AudibleSession {
         let json = JSON(data: data)
         guard (200..<300).contains(status) else {
             // Amazon reports a revoked or expired refresh token as an OAuth error.
             let code = json["error"].string ?? json["response"]["error"]["code"].string
-            let rejectedGrant = [400, 403].contains(status) && ["invalid_grant", "InvalidToken", "unauthorized_client"].contains(code)
+            let rejectedGrant = [400, 403].contains(status) && ["invalid_grant", "InvalidToken", "unauthorized_client"]
+                .contains(code)
             if status == 401 || rejectedGrant {
                 throw .authenticationRequired
             }

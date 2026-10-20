@@ -1,0 +1,6 @@
+#!/bin/bash
+# Check SwiftFormat line wrapping before SwiftLint; either failure blocks the commit.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+Scripts/format.sh --lint
+exec Scripts/lint.sh

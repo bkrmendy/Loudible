@@ -96,22 +96,26 @@ import TestSupport
         let signer = try RequestSigner(adpToken: fixture.adp_token, privateKeyPEM: Fixture.string(keyFile))
         for vector in fixture.vectors {
             let signature = try signer.signature(
-                method: vector.method, pathAndQuery: vector.path, timestamp: vector.timestamp, body: Data(vector.body.utf8)
-            )
+                method: vector.method, pathAndQuery: vector.path, timestamp: vector.timestamp,
+                body: Data(vector.body.utf8))
             #expect(signature == vector.signature)
         }
     }
 
     @Test func signsRequestHeaders() throws {
         let fixture = try JSONDecoder().decode(Vectors.self, from: Fixture.data("signing-vectors.json"))
-        let signer = try RequestSigner(adpToken: fixture.adp_token, privateKeyPEM: Fixture.string("synthetic-device-key.pem"))
+        let signer = try RequestSigner(
+            adpToken: fixture.adp_token,
+            privateKeyPEM: Fixture.string("synthetic-device-key.pem"))
         var request = URLRequest(url: URL(string: "https://api.audible.com/1.0/library?num_results=50&page=1")!)
         let date = ISO8601DateFormatter().date(from: "2027-01-15T08:00:00Z")!
         try signer.sign(&request, date: date)
 
         #expect(request.value(forHTTPHeaderField: "x-adp-token") == fixture.adp_token)
         #expect(request.value(forHTTPHeaderField: "x-adp-alg") == "SHA256withRSA:1.0")
-        #expect(request.value(forHTTPHeaderField: "x-adp-signature") == "\(fixture.vectors[0].signature):2027-01-15T08:00:00.000000Z")
+        #expect(request
+            .value(forHTTPHeaderField: "x-adp-signature") ==
+            "\(fixture.vectors[0].signature):2027-01-15T08:00:00.000000Z")
     }
 
     @Test func formatsMicrosecondTimestamps() {
@@ -130,10 +134,14 @@ import TestSupport
             try RequestSigner(adpToken: "t", privateKeyPEM: "not a key")
         }
         #expect(throws: RequestSigner.SigningError.unsupportedKeyFormat) {
-            try RequestSigner(adpToken: "t", privateKeyPEM: "-----BEGIN EC PRIVATE KEY-----\nAAAA\n-----END EC PRIVATE KEY-----")
+            try RequestSigner(
+                adpToken: "t",
+                privateKeyPEM: "-----BEGIN EC PRIVATE KEY-----\nAAAA\n-----END EC PRIVATE KEY-----")
         }
         #expect(throws: RequestSigner.SigningError.self) {
-            try RequestSigner(adpToken: "t", privateKeyPEM: "-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE KEY-----")
+            try RequestSigner(
+                adpToken: "t",
+                privateKeyPEM: "-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE KEY-----")
         }
     }
 }
@@ -157,7 +165,12 @@ import TestSupport
         let registration = try #require(body["registration_data"] as? [String: String])
         #expect(registration["device_serial"] == login.device.serial)
         #expect(registration["device_type"] == "A2CZJZGLK2JJVM")
-        #expect(body["requested_token_type"] as? [String] == ["bearer", "mac_dms", "website_cookies", "store_authentication_cookie"])
+        #expect(body["requested_token_type"] as? [String] == [
+            "bearer",
+            "mac_dms",
+            "website_cookies",
+            "store_authentication_cookie"
+        ])
         #expect((body["cookies"] as? [String: Any])?["domain"] as? String == ".amazon.co.uk")
     }
 
@@ -178,14 +191,19 @@ import TestSupport
 
     @Test func reportsServerErrors() throws {
         #expect(throws: ExporterError.http(status: 400, message: "The authorization code is invalid or expired.")) {
-            try DeviceRegistration.session(from: Fixture.data("register-error.json"), status: 400, login: login, receivedAt: Fixtures.referenceDate)
+            try DeviceRegistration.session(
+                from: Fixture.data("register-error.json"),
+                status: 400,
+                login: login,
+                receivedAt: Fixtures.referenceDate)
         }
     }
 
     @Test func rejectsResponsesWithoutTokens() throws {
         var json = try Fixture.json("register-success.json")
-        var response = json["response"] as! [String: Any], success = response["success"] as! [String: Any]
-        var tokens = success["tokens"] as! [String: Any]
+        var response = try #require(json["response"] as? [String: Any])
+        var success = try #require(response["success"] as? [String: Any])
+        var tokens = try #require(success["tokens"] as? [String: Any])
         tokens["mac_dms"] = nil
         success["tokens"] = tokens; response["success"] = success; json["response"] = response
         let data = try JSONSerialization.data(withJSONObject: json)
@@ -193,17 +211,24 @@ import TestSupport
             try DeviceRegistration.session(from: data, status: 200, login: login, receivedAt: Fixtures.referenceDate)
         }
         #expect(throws: ExporterError.self) {
-            try DeviceRegistration.session(from: Data("<html>".utf8), status: 200, login: login, receivedAt: Fixtures.referenceDate)
+            try DeviceRegistration.session(
+                from: Data("<html>".utf8),
+                status: 200,
+                login: login,
+                receivedAt: Fixtures.referenceDate)
         }
     }
 
     @Test func rejectsRegistrationOfDifferentDevice() throws {
         let other = PendingLogin(
             id: login.id, marketplace: .uk, device: DeviceIdentity(serial: "FFFF"), codeVerifier: "v",
-            loginURL: login.loginURL, cookies: [], createdAt: login.createdAt
-        )
+            loginURL: login.loginURL, cookies: [], createdAt: login.createdAt)
         #expect(throws: ExporterError.self) {
-            try DeviceRegistration.session(from: Fixture.data("register-success.json"), status: 200, login: other, receivedAt: Fixtures.referenceDate)
+            try DeviceRegistration.session(
+                from: Fixture.data("register-success.json"),
+                status: 200,
+                login: other,
+                receivedAt: Fixtures.referenceDate)
         }
     }
 
@@ -225,7 +250,7 @@ import TestSupport
 @Suite struct TokenRefreshTests {
     private let session = Fixtures.session(marketplace: .germany)
 
-    @Test func buildsFormEncodedRefreshRequest() {
+    @Test func buildsFormEncodedRefreshRequest() throws {
         let request = TokenRefresh.request(for: session)
         #expect(request.url?.absoluteString == "https://api.amazon.de/auth/token")
         #expect(request.httpMethod == "POST")
@@ -237,12 +262,18 @@ import TestSupport
             "requested_token_type": "access_token",
             "source_token_type": "refresh_token",
         ])
-        #expect(String(decoding: request.httpBody!, as: UTF8.self).contains("Atnr%7Csynthetic-refresh"))
+        let body = try #require(request.httpBody)
+        let encodedForm = try #require(String(bytes: body, encoding: .utf8))
+        #expect(encodedForm.contains("Atnr%7Csynthetic-refresh"))
     }
 
     @Test func appliesRefreshedToken() throws {
         let now = Fixtures.referenceDate.addingTimeInterval(7200)
-        let refreshed = try TokenRefresh.session(byApplying: Fixture.data("refresh-success.json"), status: 200, to: session, receivedAt: now)
+        let refreshed = try TokenRefresh.session(
+            byApplying: Fixture.data("refresh-success.json"),
+            status: 200,
+            to: session,
+            receivedAt: now)
         #expect(refreshed.accessToken == "Atna|synthetic-refreshed")
         #expect(refreshed.accessTokenExpiresAt == now.addingTimeInterval(3600))
         #expect(refreshed.refreshToken == session.refreshToken)
@@ -251,7 +282,11 @@ import TestSupport
 
     @Test func invalidGrantRequiresReauthentication() throws {
         #expect(throws: ExporterError.authenticationRequired) {
-            try TokenRefresh.session(byApplying: Fixture.data("refresh-invalid-grant.json"), status: 400, to: session, receivedAt: Fixtures.referenceDate)
+            try TokenRefresh.session(
+                byApplying: Fixture.data("refresh-invalid-grant.json"),
+                status: 400,
+                to: session,
+                receivedAt: Fixtures.referenceDate)
         }
         #expect(throws: ExporterError.authenticationRequired) {
             try TokenRefresh.session(byApplying: Data(), status: 401, to: session, receivedAt: Fixtures.referenceDate)
@@ -263,7 +298,11 @@ import TestSupport
             try TokenRefresh.session(byApplying: Data(), status: 503, to: session, receivedAt: Fixtures.referenceDate)
         }
         #expect(throws: ExporterError.self) {
-            try TokenRefresh.session(byApplying: Data("{}".utf8), status: 200, to: session, receivedAt: Fixtures.referenceDate)
+            try TokenRefresh.session(
+                byApplying: Data("{}".utf8),
+                status: 200,
+                to: session,
+                receivedAt: Fixtures.referenceDate)
         }
     }
 }
@@ -277,7 +316,7 @@ import TestSupport
         let session = Fixtures.session()
         try store.save(session)
         #expect(keychain.lastQuery.current[kSecAttrService as String] as? String == "Loudible.AudibleSession")
-        #expect(keychain.lastQuery.current[kSecClass as String] as! CFString == kSecClassGenericPassword)
+        #expect(keychain.lastQuery.current[kSecClass as String] as? String == kSecClassGenericPassword as String)
         #expect(try store.load() == session)
 
         var updated = session

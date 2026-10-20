@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import Testing
 @testable import LoudibleAdapters
 import LoudibleCore
 import TestSupport
@@ -8,7 +9,13 @@ import TestSupport
 final class MockTransport: HTTPTransport, @unchecked Sendable {
     struct Unhandled: Error { let url: URL? }
 
-    typealias Handler = @Sendable (URLRequest) async throws -> (Int, Data, [String: String])
+    struct Response: Sendable {
+        let status: Int
+        let body: Data
+        let headers: [String: String]
+    }
+
+    typealias Handler = @Sendable (URLRequest) async throws -> Response
 
     let handler: Locked<Handler>
     let requests = Locked<[URLRequest]>([])
@@ -19,14 +26,18 @@ final class MockTransport: HTTPTransport, @unchecked Sendable {
 
     /// Replies to every request with the same status and body.
     convenience init(status: Int, body: Data, headers: [String: String] = [:]) {
-        self.init { _ in (status, body, headers) }
+        self.init { _ in Response(status: status, body: body, headers: headers) }
     }
 
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         requests.withLock { $0.append(request) }
-        let (status, data, headers) = try await handler.current(request)
-        let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers)!
-        return (data, response)
+        let reply = try await handler.current(request)
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: reply.status,
+            httpVersion: "HTTP/1.1",
+            headerFields: reply.headers)!
+        return (reply.body, response)
     }
 
     var lastRequest: URLRequest? { requests.current.last }
@@ -41,11 +52,11 @@ enum Fixture {
     }
 
     static func string(_ name: String) throws -> String {
-        String(decoding: try data(name), as: UTF8.self)
+        try #require(String(bytes: data(name), encoding: .utf8))
     }
 
     static func json(_ name: String) throws -> [String: Any] {
-        try JSONSerialization.jsonObject(with: data(name)) as! [String: Any]
+        try #require(JSONSerialization.jsonObject(with: data(name)) as? [String: Any])
     }
 
     /// A session whose device key is the synthetic test key, so requests can really be signed.
@@ -109,7 +120,7 @@ extension URLRequest {
 
     var formBody: [String: String] {
         var components = URLComponents()
-        components.percentEncodedQuery = String(decoding: httpBody ?? Data(), as: UTF8.self)
+        components.percentEncodedQuery = String(bytes: httpBody ?? Data(), encoding: .utf8)
         return Dictionary((components.queryItems ?? []).map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { $1 })
     }
 

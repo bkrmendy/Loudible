@@ -23,7 +23,7 @@ import TestSupport
 
     @Test func encodesAsIdentifierAndRejectsUnknown() throws {
         let data = try JSONEncoder().encode(Marketplace.germany)
-        #expect(String(decoding: data, as: UTF8.self) == "\"de\"")
+        #expect(String(bytes: data, encoding: .utf8) == "\"de\"")
         #expect(try JSONDecoder().decode(Marketplace.self, from: data) == .germany)
         #expect(throws: DecodingError.self) {
             try JSONDecoder().decode(Marketplace.self, from: Data("\"xx\"".utf8))

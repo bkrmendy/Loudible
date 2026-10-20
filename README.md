@@ -128,13 +128,74 @@ Scripts/test.sh --filter ExportQueue  # a subset
 
 `test.sh` is the only test command. It:
 
-1. Checks that Core and Presentation do not import SwiftUI, WebKit, or AppKit.
+1. Checks SwiftFormat line wrapping, runs SwiftLint, and checks that Core and Presentation do
+   not import SwiftUI, WebKit, or AppKit.
 2. Builds the package and the tests.
 3. Runs the tests in a `sandbox-exec` profile that blocks every non-loopback connection, with a
    timeout on each step (`TEST_TIMEOUT`, default 900 s).
 
 The tests never contact Audible. They use mocks for `AudibleAPI`, the HTTP transport, and
 Keychain. Download tests use a local HTTP server on 127.0.0.1. All fixtures are synthetic.
+
+### Lint
+
+Enable the pre-commit hook once per checkout:
+
+```sh
+Scripts/install-hooks.sh
+```
+
+Every commit then checks SwiftFormat line wrapping and runs SwiftLint against the working tree,
+and is blocked if either check fails.
+You can also run it directly:
+
+```sh
+Scripts/lint.sh
+```
+
+This runs [SwiftLint](https://github.com/realm/SwiftLint) with `.swiftlint.yml` and fails on
+warnings as well as errors. It checks the package manifest, app sources, and tests, excluding
+generated code and dependencies. The first run downloads a pinned release, verifies its SHA-256,
+and caches it in `.build/tools/`; Homebrew and an FFmpeg build are not needed. Later runs work
+offline. `Scripts/test.sh` and the SwiftLint GitHub Actions workflow run the same check.
+Existing violations are recorded in `.swiftlint-baseline.json`, so new violations fail the check
+without requiring a formatting rewrite. Remove baseline entries as the corresponding code is
+cleaned up; do not regenerate the baseline to hide new violations.
+To upgrade SwiftLint, update `VERSION` and the portable archive's `SHA256` in `Scripts/swiftlint.sh`
+together, then run the lint check.
+
+### Dead code
+
+```sh
+Scripts/dead-code.sh
+```
+
+This uses the same pinned SwiftLint to run its `unused_declaration` analyzer, including public
+and open declarations. It builds the package and tests in a fresh scratch directory, then
+analyzes the complete compiler log. Test references count as uses; the Xcode app shell is not
+part of this package build. The scratch build is removed afterward, and the build log stays at
+`.build/dead-code/build.log`. The usual development build cache is preserved.
+
+The command exits nonzero when it finds unused declarations or a build/analysis error. Extra
+arguments go to `swiftlint analyze`, for example `Scripts/dead-code.sh --reporter json`.
+Review findings before removing code: runtime entry points and generated macro references may
+need closer inspection. This slower check runs separately from `test.sh` and the pre-commit hook.
+
+### Format
+
+```sh
+Scripts/format.sh         # wrap long lines
+Scripts/format.sh --lint  # check without changing files
+```
+
+This runs [SwiftFormat](https://github.com/nicklockwood/SwiftFormat) with `.swiftformat`.
+Only line wrapping is enabled, with a 120-character limit matching SwiftLint. Other formatting
+and SwiftLint issues are left for separate changes. Long strings use multiline literals with
+escaped newlines to preserve their values. Existing argument-list layouts are preserved.
+The script downloads a pinned release, checks its SHA-256, and caches it in `.build/tools/`;
+later runs work offline, without Homebrew or FFmpeg. Tests, the pre-commit hook, and the lint
+workflow check formatting without rewriting files. To upgrade, update `VERSION` and `SHA256`
+together in `Scripts/format.sh` using the upstream `swiftformat.zip` release asset.
 
 ### Build and run the app
 

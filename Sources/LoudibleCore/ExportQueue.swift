@@ -114,7 +114,10 @@ public actor ExportQueue {
     /// with an unfinished export, which downloads it anyway.
     /// - Parameter exportDestination: required for `.export`, ignored for `.download`.
     @discardableResult
-    public func enqueue(_ books: [Audiobook], kind: ExportJob.Kind, exportDestination: URL?) throws(StartError) -> [UUID] {
+    public func enqueue(
+        _ books: [Audiobook],
+        kind: ExportJob.Kind,
+        exportDestination: URL?) throws(StartError) -> [UUID] {
         var seen = Set<String>()
         let unique = books.filter { seen.insert($0.asin).inserted }
         guard !unique.isEmpty else { throw .nothingToExport }
@@ -128,7 +131,8 @@ public actor ExportQueue {
         if kind == .export {
             guard let exportDestination else { throw .destinationUnavailable("") }
             var isDirectory: ObjCBool = false
-            guard fileManager.fileExists(atPath: exportDestination.path, isDirectory: &isDirectory), isDirectory.boolValue,
+            guard fileManager.fileExists(atPath: exportDestination.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue,
                   fileManager.isWritableFile(atPath: exportDestination.path)
             else { throw .destinationUnavailable(exportDestination.path) }
         }
@@ -233,16 +237,19 @@ public actor ExportQueue {
     }
 
     private func finishIfIdle() {
-        guard snapshot.isRunning, running.isEmpty, !snapshot.jobs.contains(where: { !$0.state.isFinished }) else { return }
+        guard snapshot.isRunning, running.isEmpty,
+              !snapshot.jobs.contains(where: { !$0.state.isFinished }) else { return }
         snapshot.isRunning = false
         snapshot.isWaitingForAuthentication = false
         let waiters = finishWaiters
         finishWaiters.removeAll()
         waiters.forEach { $0.resume() }
     }
+}
 
-    // MARK: Processing
+// MARK: Processing
 
+extension ExportQueue {
     private func process(_ id: UUID) async {
         guard let index = index(of: id) else { return }
         let job = snapshot.jobs[index]
@@ -327,13 +334,15 @@ public actor ExportQueue {
         try checkCancellation()
 
         let base = ExportFileNaming.baseName(for: book)
-        let partial = destination.appendingPathComponent(ExportFileNaming.partialName(base: base, token: UUID().uuidString))
+        let partial = destination.appendingPathComponent(ExportFileNaming.partialName(
+            base: base,
+            token: UUID().uuidString))
         defer { try? fileManager.removeItem(at: partial) }
 
         update(id, to: .running(.converting, progress: 0))
         let request = ConversionRequest(
-            input: input, output: partial, decryption: decryption, chapters: chapters, metadata: BookMetadata(book: book)
-        )
+            input: input, output: partial, decryption: decryption, chapters: chapters,
+            metadata: BookMetadata(book: book))
         do {
             try await perform {
                 try await self.converter.convert(request, progress: self.progressHandler(id, .converting))
@@ -388,11 +397,10 @@ public actor ExportQueue {
                     checkpoint: { checkpoint in
                         // Best effort: without a record the bytes are simply not resumed.
                         try? downloads.writePartialDownload(PartialDownload(
-                            book: book, customerID: customerID, fileExtension: ext, checkpoint: checkpoint, updatedAt: Date()
-                        ))
+                            book: book, customerID: customerID, fileExtension: ext, checkpoint: checkpoint,
+                            updatedAt: Date()))
                     },
-                    progress: self.downloadProgressHandler(id)
-                )
+                    progress: self.downloadProgressHandler(id))
             }
             try checkCancellation()
 
@@ -402,7 +410,11 @@ public actor ExportQueue {
                 try? await downloader.download(from: coverURL, to: cover, progress: { _ in })
             }
             try checkCancellation()
-            let manifest = DownloadManifest(book: book, decryption: license.decryption, chapters: license.chapters, downloadedAt: Date())
+            let manifest = DownloadManifest(
+                book: book,
+                decryption: license.decryption,
+                chapters: license.chapters,
+                downloadedAt: Date())
             try downloads.writeManifest(manifest, coverFile: fileManager.fileExists(atPath: cover.path) ? cover : nil)
             let url: URL
             do {
@@ -421,10 +433,17 @@ public actor ExportQueue {
 
     /// Moves a finished file to the first free `Title [ASIN] (n).<ext>` name. `moveItem`
     /// refuses to overwrite, so a file appearing concurrently just bumps the suffix.
-    private func moveIntoPlace(_ partial: URL, directory: URL, base: String, extension ext: String) throws(ExporterError) -> URL {
+    private func moveIntoPlace(
+        _ partial: URL,
+        directory: URL,
+        base: String,
+        extension ext: String) throws(ExporterError) -> URL {
         var attempt = 1
         while attempt < 10_000 {
-            let candidate = directory.appendingPathComponent(ExportFileNaming.fileName(base: base, attempt: attempt, extension: ext))
+            let candidate = directory.appendingPathComponent(ExportFileNaming.fileName(
+                base: base,
+                attempt: attempt,
+                extension: ext))
             if !fileManager.fileExists(atPath: candidate.path) {
                 do {
                     try fileManager.moveItem(at: partial, to: candidate)
@@ -464,7 +483,11 @@ public actor ExportQueue {
         }
     }
 
-    private func reportProgress(_ id: UUID, _ phase: ExportJob.Phase, _ progress: Double, transferred: TransferProgress? = nil) {
+    private func reportProgress(
+        _ id: UUID,
+        _ phase: ExportJob.Phase,
+        _ progress: Double,
+        transferred: TransferProgress? = nil) {
         guard let index = index(of: id),
               case .running(let currentPhase, let current) = snapshot.jobs[index].state,
               currentPhase == phase,

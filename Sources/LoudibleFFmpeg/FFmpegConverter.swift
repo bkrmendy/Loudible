@@ -49,7 +49,10 @@ public struct FFmpegConverter: AudioConverter {
         }
     }
 
-    private static func remux(_ request: ConversionRequest, cancelFlag: CancelFlag, progress: @escaping @Sendable (Double) -> Void) throws {
+    private static func remux(
+        _ request: ConversionRequest,
+        cancelFlag: CancelFlag,
+        progress: @escaping @Sendable (Double) -> Void) throws {
         let options: [(String, String)] = switch request.decryption {
         case .aaxc(let key, let iv): [("audible_key", key.hexString), ("audible_iv", iv.hexString)]
         case .aax(let activationBytes): [("activation_bytes", activationBytes.hexString)]

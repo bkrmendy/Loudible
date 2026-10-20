@@ -27,12 +27,14 @@ import TestSupport
         let vector = try JSONDecoder().decode(Vector.self, from: Fixture.data("voucher-vector.json"))
         var other = Fixtures.session()
         other.customerID = "amzn1.account.OTHER"
-        #expect(throws: ExporterError.self) { try Voucher.decrypt(vector.voucher_base64, asin: vector.asin, session: other) }
+        #expect(throws: ExporterError.self) { try Voucher.decrypt(vector.voucher_base64, asin: vector.asin,
+                session: other) }
     }
 
     @Test func rejectsMalformedVouchers() {
         #expect(throws: ExporterError.self) { try Voucher.decrypt("***", asin: "B1", session: Fixtures.session()) }
-        #expect(throws: ExporterError.self) { try Voucher.decrypt(Data(count: 8).base64EncodedString(), asin: "B1", session: Fixtures.session()) }
+        #expect(throws: ExporterError.self) { try Voucher.decrypt(Data(count: 8).base64EncodedString(), asin: "B1",
+                session: Fixtures.session()) }
         #expect(throws: ExporterError.self) { try Voucher.parse(Data(#"{"key":"zz"}"#.utf8), asin: "B1") }
     }
 
@@ -46,11 +48,13 @@ import TestSupport
 
 @Suite struct LicenseTests {
     private func response(_ status: Int = 200) -> HTTPURLResponse {
-        HTTPURLResponse(url: URL(string: "https://api.audible.com/")!, statusCode: status, httpVersion: nil, headerFields: nil)!
+        HTTPURLResponse(url: URL(string: "https://api.audible.com/")!, statusCode: status, httpVersion: nil,
+                        headerFields: nil)!
     }
 
     private func parse(_ fixture: String, asin: String, status: Int = 200) throws -> ContentLicense {
-        try LicenseParser.license(from: Fixture.data(fixture), response: response(status), asin: asin, session: Fixtures.session())
+        try LicenseParser.license(from: Fixture.data(fixture), response: response(status), asin: asin,
+                session: Fixtures.session())
     }
 
     @Test func buildsSignedLicenseRequest() async throws {
@@ -87,11 +91,10 @@ import TestSupport
 
     @Test func parsesAAXCLicense() throws {
         let license = try parse("license-aaxc.json", asin: "B000000001")
-        #expect(license.decryption == .aaxc(
-            key: Data(hexString: "0123456789abcdef0123456789abcdef")!,
-            iv: Data(hexString: "fedcba9876543210fedcba9876543210")!
-        ))
-        #expect(license.downloadURL.absoluteString == "https://cds.audible.example/download/B000000001.aaxc?token=synthetic")
+        #expect(license.decryption == .aaxc(key: Data(hexString: "0123456789abcdef0123456789abcdef")!,
+                iv: Data(hexString: "fedcba9876543210fedcba9876543210")!))
+        #expect(license.downloadURL
+            .absoluteString == "https://cds.audible.example/download/B000000001.aaxc?token=synthetic")
         #expect(license.runtimeMilliseconds == 185_000)
         #expect(license.codec == "mp4a.40.2")
         #expect(license.chapters == [
@@ -119,9 +122,8 @@ import TestSupport
             try parse("license-denied.json", asin: "B000000005")
         }
         #expect(throws: ExporterError.licenseDenied(asin: "B1", reason: "Forbidden title")) {
-            try LicenseParser.license(
-                from: Data(#"{"message":"Forbidden title"}"#.utf8), response: response(403), asin: "B1", session: Fixtures.session()
-            )
+            try LicenseParser.license(from: Data(#"{"message":"Forbidden title"}"#.utf8), response: response(403),
+                asin: "B1", session: Fixtures.session())
         }
     }
 
@@ -133,21 +135,21 @@ import TestSupport
 
     @Test func malformedLicensesAreRejected() throws {
         #expect(throws: ExporterError.self) {
-            try LicenseParser.license(from: Data("{}".utf8), response: response(), asin: "B1", session: Fixtures.session())
+            try LicenseParser.license(from: Data("{}".utf8), response: response(), asin: "B1",
+                session: Fixtures.session())
         }
         #expect(throws: ExporterError.authenticationRequired) {
             try LicenseParser.license(from: Data(), response: response(401), asin: "B1", session: Fixtures.session())
         }
         var json = try Fixture.json("license-aaxc.json")
-        var license = json["content_license"] as! [String: Any]
-        var metadata = license["content_metadata"] as! [String: Any]
+        var license = try #require(json["content_license"] as? [String: Any])
+        var metadata = try #require(license["content_metadata"] as? [String: Any])
         metadata["content_url"] = ["offline_url": "http://insecure.example/file"]
         license["content_metadata"] = metadata
         json["content_license"] = license
         #expect(throws: ExporterError.malformedResponse("License for B000000001 has no download URL.")) {
-            try LicenseParser.license(
-                from: JSONSerialization.data(withJSONObject: json), response: response(), asin: "B000000001", session: Fixtures.session()
-            )
+            try LicenseParser.license(from: JSONSerialization.data(withJSONObject: json), response: response(),
+                asin: "B000000001", session: Fixtures.session())
         }
     }
 }
@@ -164,7 +166,8 @@ import TestSupport
         let destination = directory.url.appendingPathComponent("book.aaxc")
         let reported = Locked<[TransferProgress]>([])
 
-        try await URLSessionFileDownloader().download(from: url, to: destination) { value in reported.withLock { $0.append(value) } }
+        try await URLSessionFileDownloader()
+            .download(from: url, to: destination) { value in reported.withLock { $0.append(value) } }
 
         #expect(try Data(contentsOf: destination) == payload)
         let expected = Int64(payload.count)
@@ -212,9 +215,9 @@ import TestSupport
         let checkpoints = Locked<[DownloadCheckpoint]>([])
 
         let task = Task {
-            try await URLSessionFileDownloader().download(
-                from: url, to: destination, resume: nil, checkpoint: { value in checkpoints.withLock { $0.append(value) } }, progress: { _ in }
-            )
+            try await URLSessionFileDownloader().download(from: url, to: destination, resume: nil,
+                checkpoint: { value in
+                checkpoints.withLock { $0.append(value) } }, progress: { _ in })
         }
         // The server has answered with a partial body and now holds the connection open.
         try await waitUntil { server.requestCount == 1 }
@@ -223,7 +226,8 @@ import TestSupport
         await #expect(throws: ExporterError.cancelled) { try await task.value }
         #expect(try Data(contentsOf: destination) == payload.prefix(10_000))
         // Flushed when the transfer stopped, so all of it can be continued.
-        #expect(checkpoints.current.last == DownloadCheckpoint(expectedLength: Int64(payload.count), validator: .none, committedLength: 10_000))
+        #expect(checkpoints.current.last == DownloadCheckpoint(expectedLength: Int64(payload.count), validator: .none,
+                committedLength: 10_000))
     }
 
     @Test func alreadyCancelledTaskDoesNotConnect() async throws {
@@ -235,7 +239,8 @@ import TestSupport
 
         let task = Task {
             withUnsafeCurrentTask { $0?.cancel() }
-            try await URLSessionFileDownloader().download(from: url, to: directory.url.appendingPathComponent("x")) { _ in }
+            try await URLSessionFileDownloader()
+                .download(from: url, to: directory.url.appendingPathComponent("x")) { _ in }
         }
         await #expect(throws: (any Error).self) { try await task.value }
         #expect(server.requestCount == 0)
@@ -243,27 +248,6 @@ import TestSupport
     }
 
     // MARK: Resuming
-
-    /// Downloads `file` into a destination that already holds `existing`, resuming from `resume`.
-    func resume(
-        _ file: LocalHTTPServer.File, existing: Data, from resume: ResumePoint, checkpointInterval: Int64 = 8 << 20
-    ) async throws -> (server: LocalHTTPServer, result: Data, checkpoints: [DownloadCheckpoint], progress: [TransferProgress]) {
-        let server = try LocalHTTPServer(reply: .file(file))
-        defer { server.stop() }
-        let url = try await server.start()
-        let directory = try TemporaryDirectory("download")
-        defer { directory.cleanUp() }
-        let destination = directory.url.appendingPathComponent("book.aaxc")
-        try existing.write(to: destination)
-        let checkpoints = Locked<[DownloadCheckpoint]>([])
-        let progress = Locked<[TransferProgress]>([])
-        try await URLSessionFileDownloader(checkpointInterval: checkpointInterval).download(
-            from: url, to: destination, resume: resume,
-            checkpoint: { value in checkpoints.withLock { $0.append(value) } },
-            progress: { value in progress.withLock { $0.append(value) } }
-        )
-        return (server, try Data(contentsOf: destination), checkpoints.current, progress.current)
-    }
 
     var total: Int64 { Int64(payload.count) }
 
@@ -278,7 +262,8 @@ import TestSupport
         #expect(run.result == payload)
         #expect(run.server.requests.map { $0["range"] } == ["bytes=80000-"])
         #expect(run.server.requests.first?["if-range"] == "\"v1\"")
-        #expect(run.checkpoints.first == DownloadCheckpoint(expectedLength: total, validator: .etag("\"v1\""), committedLength: 80_000))
+        #expect(run.checkpoints.first == DownloadCheckpoint(expectedLength: total, validator: .etag("\"v1\""),
+                committedLength: 80_000))
         #expect(run.checkpoints.last?.committedLength == total)
         #expect(run.progress.first.map(\.bytesReceived).map { $0 >= 80_000 } == true)
         #expect(run.progress.last == TransferProgress(bytesReceived: total, bytesExpected: total))
@@ -304,10 +289,9 @@ import TestSupport
     }
 
     @Test func serverIgnoringRangeStartsOver() async throws {
-        let run = try await resume(
-            LocalHTTPServer.File(body: payload, etag: "\"v1\"", honorsRange: false), existing: Data(repeating: 7, count: 1_000),
-            from: ResumePoint(committedLength: 1_000, expectedLength: total, validator: .etag("\"v1\""))
-        )
+        let run = try await resume(LocalHTTPServer.File(body: payload, etag: "\"v1\"", honorsRange: false),
+                existing: Data(repeating: 7, count: 1_000),
+                from: ResumePoint(committedLength: 1_000, expectedLength: total, validator: .etag("\"v1\"")))
         #expect(run.result == payload)
         #expect(run.server.requestCount == 1)
         #expect(run.checkpoints.first?.committedLength == 0)
@@ -323,10 +307,9 @@ import TestSupport
         #expect(honest.server.requestCount == 1)
 
         // One that sends a range of the new file anyway is caught by the validator, and asked again.
-        let broken = try await resume(
-            LocalHTTPServer.File(body: payload, etag: "\"v2\"", ignoresIfRange: true), existing: Data(repeating: 7, count: 1_000),
-            from: ResumePoint(committedLength: 1_000, expectedLength: total, validator: .etag("\"v1\""))
-        )
+        let broken = try await resume(LocalHTTPServer.File(body: payload, etag: "\"v2\"", ignoresIfRange: true),
+                existing: Data(repeating: 7, count: 1_000),
+                from: ResumePoint(committedLength: 1_000, expectedLength: total, validator: .etag("\"v1\"")))
         #expect(broken.result == payload)
         #expect(broken.server.requests.map { $0["range"] } == ["bytes=1000-", nil])
     }
@@ -359,10 +342,10 @@ import TestSupport
     }
 
     @Test func checkpointsFollowFlushesDuringTheTransfer() async throws {
-        let run = try await resume(
-            LocalHTTPServer.File(body: payload, etag: "\"v1\"", pauseAfter: 60_000), existing: Data(),
-            from: ResumePoint(committedLength: 0, expectedLength: total, validator: .etag("\"v1\"")), checkpointInterval: 50_000
-        )
+        let run = try await resume(LocalHTTPServer.File(body: payload, etag: "\"v1\"", pauseAfter: 60_000),
+                existing: Data(),
+                from: ResumePoint(committedLength: 0, expectedLength: total, validator: .etag("\"v1\"")),
+                checkpointInterval: 50_000)
         #expect(run.result == payload)
         // On the response, once 50 000 bytes have arrived in the first part, and at the end.
         let committed = run.checkpoints.map(\.committedLength)
@@ -373,7 +356,8 @@ import TestSupport
     }
 
     @Test func droppedConnectionKeepsTheBytesAndTheirCheckpoint() async throws {
-        let server = try LocalHTTPServer(reply: .file(LocalHTTPServer.File(body: payload, etag: "\"v1\"", dropAfter: 30_000)))
+        let server = try LocalHTTPServer(reply: .file(LocalHTTPServer.File(body: payload, etag: "\"v1\"",
+                dropAfter: 30_000)))
         defer { server.stop() }
         let url = try await server.start()
         let directory = try TemporaryDirectory("download")
@@ -382,11 +366,12 @@ import TestSupport
         let checkpoints = Locked<[DownloadCheckpoint]>([])
 
         await #expect(throws: ExporterError.self) {
-            try await URLSessionFileDownloader().download(
-                from: url, to: destination, resume: nil, checkpoint: { value in checkpoints.withLock { $0.append(value) } }, progress: { _ in }
-            )
+            try await URLSessionFileDownloader().download(from: url, to: destination, resume: nil,
+                checkpoint: { value in
+                checkpoints.withLock { $0.append(value) } }, progress: { _ in })
         }
         #expect(try Data(contentsOf: destination) == payload.prefix(30_000))
-        #expect(checkpoints.current.last == DownloadCheckpoint(expectedLength: total, validator: .etag("\"v1\""), committedLength: 30_000))
+        #expect(checkpoints.current.last == DownloadCheckpoint(expectedLength: total, validator: .etag("\"v1\""),
+                committedLength: 30_000))
     }
 }

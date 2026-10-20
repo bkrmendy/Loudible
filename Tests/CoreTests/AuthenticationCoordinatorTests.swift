@@ -55,7 +55,8 @@ import TestSupport
 
     @Test func passesPendingVerifierAndCodeToRegistration() async throws {
         let received = Locked<(PendingLogin, String)?>(nil)
-        api.registerHandler.withLock { $0 = { login, code in received.withLock { $0 = (login, code) }; return Fixtures.session() } }
+        api.registerHandler
+            .withLock { $0 = { login, code in received.withLock { $0 = (login, code) }; return Fixtures.session() } }
         let auth = coordinator()
         let login = try await auth.beginLogin(marketplace: .us)
         _ = try await auth.completeLogin(callbackURL: Fixtures.callbackURL(code: "abc"))
@@ -123,11 +124,15 @@ import TestSupport
         api.makeLoginHandler.withLock {
             $0 = { marketplace in
                 let n = ids.withLock { $0 += 1; return $0 }
-                return Fixtures.pendingLogin(marketplace: marketplace, id: UUID(uuidString: "00000000-0000-0000-0000-00000000000\(n)")!)
+                return Fixtures.pendingLogin(
+                    marketplace: marketplace,
+                    id: UUID(uuidString: "00000000-0000-0000-0000-00000000000\(n)")!)
             }
         }
         let received = Locked<PendingLogin?>(nil)
-        api.registerHandler.withLock { $0 = { login, _ in received.withLock { $0 = login }; return Fixtures.session(marketplace: .uk) } }
+        api.registerHandler
+            .withLock { $0 = { login, _ in
+            received.withLock { $0 = login }; return Fixtures.session(marketplace: .uk) } }
         let auth = coordinator()
         _ = try await auth.beginLogin(marketplace: .us)
         let second = try await auth.beginLogin(marketplace: .uk)
@@ -142,11 +147,15 @@ import TestSupport
 
     @Test(arguments: [
         ("http://www.amazon.com/ap/maplanding?openid.oa2.authorization_code=x", LoginCallbackError.malformedURL),
-        ("https://www.amazon.evil.com/ap/maplanding?openid.oa2.authorization_code=x", .unexpectedHost("www.amazon.evil.com")),
+        (
+            "https://www.amazon.evil.com/ap/maplanding?openid.oa2.authorization_code=x",
+            .unexpectedHost("www.amazon.evil.com")),
         ("https://www.amazon.com/ap/signin?openid.oa2.authorization_code=x", .unexpectedPath("/ap/signin")),
         ("https://www.amazon.com/ap/maplanding?other=1", .missingAuthorizationCode),
         ("https://www.amazon.com/ap/maplanding?openid.oa2.authorization_code=", .missingAuthorizationCode),
-        ("https://www.amazon.com/ap/maplanding?openid.oa2.authorization_code=a&openid.oa2.authorization_code=b", .missingAuthorizationCode),
+        (
+            "https://www.amazon.com/ap/maplanding?openid.oa2.authorization_code=a&openid.oa2.authorization_code=b",
+            .missingAuthorizationCode),
         ("not a url at all", .malformedURL),
     ])
     func malformedCallbackKeepsLoginPending(url: String, expected: LoginCallbackError) async throws {
@@ -202,9 +211,11 @@ import TestSupport
         #expect(await auth.state.session != nil)
         #expect(await auth.storageWarning != nil)
     }
+}
 
-    // MARK: Refresh
+// MARK: Refresh
 
+extension AuthenticationCoordinatorTests {
     @Test func validSessionWithoutSignInRequiresAuthentication() async {
         await #expect(throws: ExporterError.authenticationRequired) { try await coordinator().validSession() }
     }
@@ -324,6 +335,11 @@ import TestSupport
         }
         let login = try await auth.beginLogin(marketplace: .us)
         _ = try await auth.completeLogin(callbackURL: Fixtures.callbackURL())
-        #expect(await collected.value == [.signedOut, .awaitingCallback(login), .registering(login), .signedIn(Fixtures.session())])
+        #expect(await collected.value == [
+            .signedOut,
+            .awaitingCallback(login),
+            .registering(login),
+            .signedIn(Fixtures.session())
+        ])
     }
 }

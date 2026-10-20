@@ -39,7 +39,8 @@ import TestSupport
     @Test func showsLoadingThenLoaded() async throws {
         let gate = AsyncGate()
         api.libraryHandler.withLock {
-            $0 = { _, _, marketplace, _ in await gate.wait(); return LibraryPage(entries: marketplace == .us ? [Fixtures.entry("B1")] : []) }
+            $0 = { _, _, marketplace, _ in
+                await gate.wait(); return LibraryPage(entries: marketplace == .us ? [Fixtures.entry("B1")] : []) }
         }
         let model = try await makeModel()
         let refresh = Task { await model.refresh() }
@@ -83,7 +84,11 @@ import TestSupport
         api.libraryHandler.withLock {
             $0 = { _, _, marketplace, _ in
                 guard marketplace == .us else { return LibraryPage(entries: []) }
-                return LibraryPage(entries: [Fixtures.entry("B1", title: "Alpha"), Fixtures.entry("B2", title: "Beta"), Fixtures.entry("B3", title: "Alphabet")])
+                return LibraryPage(entries: [
+                    Fixtures.entry("B1", title: "Alpha"),
+                    Fixtures.entry("B2", title: "Beta"),
+                    Fixtures.entry("B3", title: "Alphabet")
+                ])
             }
         }
         let model = try await makeModel()

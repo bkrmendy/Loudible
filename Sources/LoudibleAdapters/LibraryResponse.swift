@@ -28,7 +28,10 @@ enum LibraryRequest {
 
 enum LibraryParser {
     /// Parses a page of the library held in `marketplace`; every book is tagged with it.
-    static func page(from data: Data, response: HTTPURLResponse, marketplace: Marketplace) throws(ExporterError) -> LibraryPage {
+    static func page(
+        from data: Data,
+        response: HTTPURLResponse,
+        marketplace: Marketplace) throws(ExporterError) -> LibraryPage {
         try AudibleAPIStatus.check(data: data, response: response)
         let json = JSON(data: data)
         guard let items = json["items"].array else {
@@ -54,15 +57,15 @@ enum LibraryParser {
             runtimeMinutes: item["runtime_length_min"].int,
             releaseDate: item["release_date"].string,
             purchaseDate: item["purchase_date"].string.flatMap(parseDate),
-            coverImageURL: (item["product_images"]["500"].string ?? item["product_images"].dictionary?.values.compactMap(\.string).first)
-                .flatMap(URL.init(string:))
-        )
+            coverImageURL: (item["product_images"]["500"].string ?? item["product_images"].dictionary?.values
+            .compactMap(\.string).first)
+                .flatMap(URL.init(string:)))
         let relationships = (item["relationships"].array ?? []).map { relationship in
             ProductRelationship(
                 asin: relationship["asin"].string,
-                direction: relationship["relationship_to_product"].string.flatMap { ProductRelationship.Direction(rawValue: $0.lowercased()) },
-                type: relationship["relationship_type"].string
-            )
+                direction: relationship["relationship_to_product"].string
+                .flatMap { ProductRelationship.Direction(rawValue: $0.lowercased()) },
+                type: relationship["relationship_type"].string)
         }
         return LibraryEntry(
             book: book,

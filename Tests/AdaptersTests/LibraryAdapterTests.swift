@@ -6,13 +6,21 @@ import TestSupport
 
 @Suite struct LibraryAdapterTests {
     private func response(status: Int = 200, headers: [String: String] = [:]) -> HTTPURLResponse {
-        HTTPURLResponse(url: URL(string: "https://api.audible.com/1.0/library")!, statusCode: status, httpVersion: nil, headerFields: headers)!
+        HTTPURLResponse(
+            url: URL(string: "https://api.audible.com/1.0/library")!,
+            statusCode: status,
+            httpVersion: nil,
+            headerFields: headers)!
     }
 
     @Test func buildsSignedLibraryRequest() async throws {
         let transport = MockTransport(status: 200, body: Data(#"{"items": []}"#.utf8))
         let api = AudibleHTTPAPI(transport: transport, random: SequentialRandom(), clock: TestClock())
-        _ = try await api.libraryPage(3, pageSize: 50, marketplace: .canada, session: Fixture.signingSession(marketplace: .canada))
+        _ = try await api.libraryPage(
+            3,
+            pageSize: 50,
+            marketplace: .canada,
+            session: Fixture.signingSession(marketplace: .canada))
 
         let request = try #require(transport.lastRequest)
         #expect(request.httpMethod == "GET")
@@ -28,7 +36,11 @@ import TestSupport
     @Test func asksTheRequestedStoreNotTheSessionsOwn() async throws {
         let transport = MockTransport(status: 200, body: try Fixture.data("library-page.json"))
         let api = AudibleHTTPAPI(transport: transport, random: SequentialRandom(), clock: TestClock())
-        let page = try await api.libraryPage(1, pageSize: 50, marketplace: .japan, session: Fixture.signingSession(marketplace: .us))
+        let page = try await api.libraryPage(
+            1,
+            pageSize: 50,
+            marketplace: .japan,
+            session: Fixture.signingSession(marketplace: .us))
 
         let request = try #require(transport.lastRequest)
         #expect(request.url?.host == "api.audible.co.jp")
@@ -38,9 +50,19 @@ import TestSupport
     }
 
     @Test func parsesItemsAndOptionalFields() throws {
-        let page = try LibraryParser.page(from: Fixture.data("library-page.json"), response: response(headers: ["Total-Count": "42"]), marketplace: .uk)
+        let page = try LibraryParser.page(
+            from: Fixture.data("library-page.json"),
+            response: response(headers: ["Total-Count": "42"]),
+            marketplace: .uk)
         #expect(page.totalCount == 42)
-        #expect(page.entries.map(\.book.asin) == ["B000000001", "B000000002", "B000000003", "B000000004", "B000000005", "B000000006"])
+        #expect(page.entries.map(\.book.asin) == [
+            "B000000001",
+            "B000000002",
+            "B000000003",
+            "B000000004",
+            "B000000005",
+            "B000000006"
+        ])
 
         let full = page.entries[0]
         #expect(full.book.title == "The Synthetic Novel")
@@ -53,8 +75,10 @@ import TestSupport
         #expect(full.book.runtimeMinutes == 754)
         #expect(full.book.releaseDate == "2021-03-04")
         let purchased = try #require(full.book.purchaseDate)
-        #expect(abs(purchased.timeIntervalSince(ISO8601DateFormatter().date(from: "2022-05-06T07:08:09Z")!) - 0.123) < 0.001)
-        #expect(full.book.coverImageURL?.absoluteString == "https://m.media-amazon.example/images/I/synthetic._SL500_.jpg")
+        #expect(abs(purchased.timeIntervalSince(ISO8601DateFormatter().date(from: "2022-05-06T07:08:09Z")!) - 0.123) <
+            0.001)
+        #expect(full.book.coverImageURL?
+            .absoluteString == "https://m.media-amazon.example/images/I/synthetic._SL500_.jpg")
         #expect(full.contentDeliveryType == "SinglePartBook")
         #expect(full.isAYCE == false)
         #expect(full.relationships == [ProductRelationship(asin: "S1", direction: .parent, type: "series")])
@@ -74,12 +98,22 @@ import TestSupport
     }
 
     @Test func appliesOwnershipRulesToParsedFixture() throws {
-        let page = try LibraryParser.page(from: Fixture.data("library-page.json"), response: response(), marketplace: .us)
-        #expect(LibraryRules.purchasedBooks(from: page.entries).map(\.asin) == ["B000000001", "B000000002", "B000000006"])
+        let page = try LibraryParser.page(
+            from: Fixture.data("library-page.json"),
+            response: response(),
+            marketplace: .us)
+        #expect(LibraryRules.purchasedBooks(from: page.entries).map(\.asin) == [
+            "B000000001",
+            "B000000002",
+            "B000000006"
+        ])
     }
 
     @Test func emptyLibrary() throws {
-        let page = try LibraryParser.page(from: Data(#"{"items": [], "response_groups": []}"#.utf8), response: response(), marketplace: .us)
+        let page = try LibraryParser.page(
+            from: Data(#"{"items": [], "response_groups": []}"#.utf8),
+            response: response(),
+            marketplace: .us)
         #expect(page.entries.isEmpty)
         #expect(page.totalCount == nil)
     }
@@ -89,7 +123,10 @@ import TestSupport
             try LibraryParser.page(from: Data(), response: response(status: 401), marketplace: .us)
         }
         #expect(throws: ExporterError.http(status: 500, message: "Internal failure")) {
-            try LibraryParser.page(from: Data(#"{"message": "Internal failure"}"#.utf8), response: response(status: 500), marketplace: .us)
+            try LibraryParser.page(
+                from: Data(#"{"message": "Internal failure"}"#.utf8),
+                response: response(status: 500),
+                marketplace: .us)
         }
         #expect(throws: ExporterError.malformedResponse("Library response has no items.")) {
             try LibraryParser.page(from: Data("<html>".utf8), response: response(), marketplace: .us)

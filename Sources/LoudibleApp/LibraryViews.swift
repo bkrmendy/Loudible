@@ -145,8 +145,8 @@ struct BookTile: View {
             .help(tooltip)
             .accessibilityLabel(book.title)
             .accessibilityValue(
-                [state.marketplaceBadge.map { "Audible \($0)" }, state.status.accessibilityText].compactMap { $0 }.joined(separator: ", ")
-            )
+                [state.marketplaceBadge.map { "Audible \($0)" }, state.status.accessibilityText].compactMap { $0 }
+                    .joined(separator: ", "))
             .accessibilityAddTraits(state.isSelected ? .isSelected : [])
             .accessibilityActions {
                 ForEach(state.menuItems.filter(\.isEnabled)) { item in

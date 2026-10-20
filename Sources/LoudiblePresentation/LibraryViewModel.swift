@@ -166,7 +166,9 @@ public final class LibraryViewModel {
             guard let books = foreignBooks[marketplace] else { continue }
             let before = merged.count
             merged = LibraryRules.merge(merged, books)
-            if merged.count > before { counts.append(MarketplaceCount(marketplace: marketplace, count: merged.count - before)) }
+            if merged.count > before { counts.append(MarketplaceCount(
+                marketplace: marketplace,
+                count: merged.count - before)) }
         }
         remoteBooks = merged
         remoteASINs = Set(merged.map(\.asin))

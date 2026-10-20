@@ -19,12 +19,13 @@ struct LoginSheet: View {
             errorMessage: session.errorMessage,
             openInBrowser: { NSWorkspace.shared.open(login.loginURL) },
             submitPastedURL: { Task { await session.submitPastedURL() } },
-            cancel: { Task { await session.cancelSignIn() } }
-        ) {
-            LoginWebView(login: login) { url in
-                Task { await session.completeSignIn(with: url) }
-            } isCallback: { session.isCallback($0) }
-        }
+            cancel: { Task { await session.cancelSignIn() } },
+            browser: {
+                LoginWebView(login: login) { url in
+                    Task { await session.completeSignIn(with: url) }
+                } isCallback: { session.isCallback($0) }
+            }
+        )
     }
 }
 
@@ -78,7 +79,11 @@ struct LoginSheetContent<Browser: View>: View {
 
             DisclosureGroup("Trouble signing in? Use your web browser", isExpanded: $showsBrowserFallback) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Open the sign-in page in your browser. After signing in you will land on an error or blank page; copy that page's full address and paste it here.")
+                    Text(
+                        """
+                        Open the sign-in page in your browser. After signing in you will land on an error or blank \
+                        page; copy that page's full address and paste it here.
+                        """)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -171,7 +176,9 @@ struct LoginWebView: NSViewRepresentable {
             return true
         }
 
-        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
             deliverIfCallback(navigationAction.request.url) ? .cancel : .allow
         }
 
@@ -179,7 +186,10 @@ struct LoginWebView: NSViewRepresentable {
             if deliverIfCallback(webView.url) { webView.stopLoading() }
         }
 
-        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
+        func webView(
+            _ webView: WKWebView,
+            didFailProvisionalNavigation navigation: WKNavigation!,
+            withError error: any Error) {
             _ = deliverIfCallback((error as NSError).userInfo[NSURLErrorFailingURLErrorKey] as? URL)
         }
     }

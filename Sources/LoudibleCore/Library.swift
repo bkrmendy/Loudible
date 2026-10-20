@@ -15,7 +15,8 @@ public enum LibraryRules {
     public static func exclusion(for entry: LibraryEntry) -> Exclusion? {
         let deliveryType = entry.contentDeliveryType?.lowercased()
         // A parent of episodes/seasons is a container, not a listenable title.
-        if entry.relationships.contains(where: { $0.direction == .child && containerRelationshipTypes.contains($0.type ?? "") })
+        if entry.relationships
+            .contains(where: { $0.direction == .child && containerRelationshipTypes.contains($0.type ?? "") })
             || deliveryType == "podcastparent" || deliveryType == "podcastseason" {
             return .container
         }
@@ -35,7 +36,8 @@ public enum LibraryRules {
 
     /// Whether the book is left out of the library, remote or downloaded.
     public static func isHidden(_ book: Audiobook) -> Bool {
-        hiddenTitleFragments.contains { book.title.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+        hiddenTitleFragments
+            .contains { book.title.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
     }
 
     /// `existing` followed by the books of `new` whose ASIN it does not have yet, so the home
@@ -62,7 +64,8 @@ public enum LibrarySearch {
         let terms = query.split(whereSeparator: \.isWhitespace).map(String.init)
         guard !terms.isEmpty else { return books }
         return books.filter { book in
-            let fields = [book.title, book.subtitle, book.seriesTitle, book.asin].compactMap { $0 } + book.authors + book.narrators
+            let fields = [book.title, book.subtitle, book.seriesTitle, book.asin].compactMap { $0 } + book
+                .authors + book.narrators
             return terms.allSatisfy { term in
                 fields.contains { $0.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
             }
@@ -193,7 +196,11 @@ public struct LibraryService: Sendable {
                 // Refreshes (shared with any other caller) when the token is about to expire.
                 let session = try await auth.validSession()
                 do {
-                    return try await api.libraryPage(number, pageSize: pageSize, marketplace: marketplace, session: session)
+                    return try await api.libraryPage(
+                        number,
+                        pageSize: pageSize,
+                        marketplace: marketplace,
+                        session: session)
                 } catch {
                     throw ExporterError.from(error)
                 }

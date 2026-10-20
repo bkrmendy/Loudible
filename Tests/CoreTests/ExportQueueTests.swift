@@ -62,8 +62,8 @@ import TestSupport
         if withManifest {
             let manifest = DownloadManifest(
                 book: book, decryption: .aax(activationBytes: Data([1, 2, 3, 4])),
-                chapters: [Chapter(title: "Stored", startMilliseconds: 0, lengthMilliseconds: 1)], downloadedAt: Fixtures.referenceDate
-            )
+                chapters: [Chapter(title: "Stored", startMilliseconds: 0, lengthMilliseconds: 1)],
+                downloadedAt: Fixtures.referenceDate)
             try downloads.writeManifest(manifest)
         }
         return url
@@ -73,9 +73,11 @@ import TestSupport
         destination.cleanUp()
         work.cleanUp()
     }
+}
 
-    // MARK: Export success
+// MARK: Export success
 
+extension ExportQueueTests {
     @Test func exportsSequentiallyWithSanitizedNamesAndKeepsDownloads() async throws {
         defer { cleanUp() }
         let order = Locked<[String]>([])
@@ -118,7 +120,8 @@ import TestSupport
         #expect(request.decryption == license.decryption)
         #expect(request.chapters == license.chapters)
         #expect(request.metadata == BookMetadata(book: books(1)[0]))
-        #expect(request.input.standardizedFileURL == downloads.folder.appendingPathComponent("Book 1 [B000000001].aaxc").standardizedFileURL)
+        #expect(request.input.standardizedFileURL == downloads.folder.appendingPathComponent("Book 1 [B000000001].aaxc")
+            .standardizedFileURL)
         // Temporary output lives next to the destination so the final move is atomic.
         #expect(request.output.deletingLastPathComponent().standardizedFileURL == destination.url.standardizedFileURL)
         #expect(request.output.lastPathComponent.hasPrefix("."))
@@ -137,7 +140,8 @@ import TestSupport
         defer { cleanUp() }
         let existing = destination.url.appendingPathComponent("Book 1 [B000000001].m4b")
         try Data("keep me".utf8).write(to: existing)
-        let snapshot = try await runToCompletion(books(1) + books(1).map { _ in Fixtures.book("B000000001", title: "dup") })
+        let snapshot = try await runToCompletion(books(1) + books(1).map { _ in
+            Fixtures.book("B000000001", title: "dup") })
         #expect(snapshot.jobs.count == 1) // duplicate ASINs are exported once
         #expect(destination.contents() == ["Book 1 [B000000001] (2).m4b", "Book 1 [B000000001].m4b"])
         #expect(try Data(contentsOf: existing) == Data("keep me".utf8))
@@ -146,8 +150,10 @@ import TestSupport
     @Test func reportsPhasesAndProgress() async throws {
         defer { cleanUp() }
         let downloadGate = AsyncGate(), convertGate = AsyncGate()
-        downloader.handler.withLock { $0 = { _, destination in await downloadGate.wait(); try Data().write(to: destination) } }
-        converter.handler.withLock { $0 = { request in await convertGate.wait(); try Data().write(to: request.output) } }
+        downloader.handler
+            .withLock { $0 = { _, destination in await downloadGate.wait(); try Data().write(to: destination) } }
+        converter.handler
+            .withLock { $0 = { request in await convertGate.wait(); try Data().write(to: request.output) } }
         let (queue, _) = try await makeQueue()
         let updates = await queue.updates()
         try await queue.start(books(2), destination: destination.url)
@@ -174,9 +180,11 @@ import TestSupport
         }
         #expect(latest == snapshot)
     }
+}
 
-    // MARK: Downloads
+// MARK: Downloads
 
+extension ExportQueueTests {
     @Test func downloadJobKeepsFileAndWritesManifest() async throws {
         defer { cleanUp() }
         let snapshot = try await runToCompletion(books(1), kind: .download)
@@ -198,7 +206,11 @@ import TestSupport
         defer { cleanUp() }
         api.licenseHandler.withLock {
             $0 = { asin, _ in
-                ContentLicense(asin: asin, decryption: .aax(activationBytes: Data([1, 2, 3, 4])), downloadURL: URL(string: "https://cdn.example.invalid/x.aax")!, chapters: [])
+                ContentLicense(
+                    asin: asin,
+                    decryption: .aax(activationBytes: Data([1, 2, 3, 4])),
+                    downloadURL: URL(string: "https://cdn.example.invalid/x.aax")!,
+                    chapters: [])
             }
         }
         _ = try await runToCompletion(books(1), kind: .download)
@@ -224,7 +236,8 @@ import TestSupport
         #expect(request.input == kept)
         #expect(request.decryption == .aax(activationBytes: Data([1, 2, 3, 4])))
         #expect(request.chapters.map(\.title) == ["Stored"])
-        #expect(snapshot.jobs.map(\.state) == [.completed(destination.url.appendingPathComponent("Book 1 [B000000001].m4b"))])
+        #expect(snapshot.jobs
+            .map(\.state) == [.completed(destination.url.appendingPathComponent("Book 1 [B000000001].m4b"))])
         #expect(try Data(contentsOf: kept) == Data("kept".utf8)) // the download is never deleted
     }
 
@@ -338,9 +351,11 @@ import TestSupport
         await queue.waitUntilFinished()
         #expect(await queue.currentSnapshot.jobs.map(\.kind) == [.download, .export, .export])
     }
+}
 
-    // MARK: Failures
+// MARK: Failures
 
+extension ExportQueueTests {
     @Test func failureContinuesWithNextBookAndKeepsCompletedExports() async throws {
         defer { cleanUp() }
         api.licenseHandler.withLock {
@@ -394,11 +409,11 @@ import TestSupport
         try await queue.enqueue(books(1), kind: .download, exportDestination: nil)
         await queue.waitUntilFinished()
 
-        #expect(await queue.currentSnapshot.jobs[0].state == .completed(downloads.folder.appendingPathComponent("Book 1 [B000000001].aaxc")))
+        #expect(await queue.currentSnapshot.jobs[0]
+            .state == .completed(downloads.folder.appendingPathComponent("Book 1 [B000000001].aaxc")))
         #expect(downloader.resumes.current.first! == nil)
         #expect(downloader.resumes.current.last! == ResumePoint(
-            committedLength: 7, expectedLength: downloader.expectedLength, validator: MockDownloader.validator
-        ))
+            committedLength: 7, expectedLength: downloader.expectedLength, validator: MockDownloader.validator))
         #expect(api.requestedLicenses.current == ["B000000001", "B000000001"])
         #expect(downloadsContents() == ["Book 1 [B000000001].aaxc"])
         #expect(manifestContents() == ["B000000001.json"])
@@ -410,12 +425,14 @@ import TestSupport
         try Data("theirs".utf8).write(to: downloads.partialFileURL(for: "B000000001"))
         try downloads.writePartialDownload(PartialDownload(
             book: books(1)[0], customerID: "amzn1.account.SOMEONE.ELSE", fileExtension: "aaxc",
-            checkpoint: DownloadCheckpoint(expectedLength: 9, validator: .none, committedLength: 6), updatedAt: Fixtures.referenceDate
-        ))
+            checkpoint: DownloadCheckpoint(expectedLength: 9, validator: .none, committedLength: 6),
+            updatedAt: Fixtures.referenceDate))
         let snapshot = try await runToCompletion(books(1), kind: .download)
-        #expect(snapshot.jobs[0].state == .completed(downloads.folder.appendingPathComponent("Book 1 [B000000001].aaxc")))
+        #expect(snapshot.jobs[0]
+            .state == .completed(downloads.folder.appendingPathComponent("Book 1 [B000000001].aaxc")))
         #expect(downloader.resumes.current.first! == nil)
-        #expect(try Data(contentsOf: downloads.folder.appendingPathComponent("Book 1 [B000000001].aaxc")) == Data("encrypted".utf8))
+        #expect(try Data(contentsOf: downloads.folder.appendingPathComponent("Book 1 [B000000001].aaxc")) ==
+            Data("encrypted".utf8))
         #expect(manifestContents() == ["B000000001.json"])
     }
 
@@ -431,7 +448,10 @@ import TestSupport
             }
         }
         let (queue, _) = try await makeQueue()
-        try await queue.enqueue(books(1) + [Fixtures.book("B000000002", title: "Book 2")], kind: kind, exportDestination: destination.url)
+        try await queue.enqueue(
+            books(1) + [Fixtures.book("B000000002", title: "Book 2")],
+            kind: kind,
+            exportDestination: destination.url)
         try await waitUntil { downloader.downloads.current.count == 1 }
         await queue.suspend()
         await gate.open()
@@ -460,19 +480,24 @@ import TestSupport
         defer { cleanUp() }
         converter.handler.withLock { $0 = { _ in } }
         let snapshot = try await runToCompletion(books(1))
-        #expect(snapshot.jobs[0].state == .failed("Book 1: Conversion failed: The converter did not produce an output file."))
+        #expect(snapshot.jobs[0]
+            .state == .failed("Book 1: Conversion failed: The converter did not produce an output file."))
     }
 
     @Test func deniedLicenseIsTitleSpecific() async throws {
         defer { cleanUp() }
-        api.licenseHandler.withLock { $0 = { asin, _ in throw ExporterError.licenseDenied(asin: asin, reason: "not owned") } }
+        api.licenseHandler.withLock { $0 = { asin, _ in throw ExporterError.licenseDenied(
+            asin: asin,
+            reason: "not owned") } }
         let snapshot = try await runToCompletion(books(1))
         #expect(snapshot.jobs[0].state == .failed("Book 1: The download license was denied: not owned"))
         #expect(downloader.downloads.current.isEmpty)
     }
+}
 
-    // MARK: Cancellation
+// MARK: Cancellation
 
+extension ExportQueueTests {
     @Test func cancelStopsCurrentAndQueuedBooksButKeepsCompleted() async throws {
         defer { cleanUp() }
         let gate = AsyncGate()
@@ -605,7 +630,8 @@ import TestSupport
     @Test func clearForgetsFinishedJobsButNotRunningOnes() async throws {
         defer { cleanUp() }
         let gate = AsyncGate()
-        converter.handler.withLock { $0 = { request in await gate.wait(); try Data("m4b".utf8).write(to: request.output) } }
+        converter.handler
+            .withLock { $0 = { request in await gate.wait(); try Data("m4b".utf8).write(to: request.output) } }
         let (queue, _) = try await makeQueue()
         try await queue.start(books(1), destination: destination.url)
         await queue.clear()
@@ -616,9 +642,11 @@ import TestSupport
         #expect(await queue.currentSnapshot == ExportQueue.Snapshot())
         #expect(destination.contents() == ["Book 1 [B000000001].m4b"])
     }
+}
 
-    // MARK: Authentication
+// MARK: Authentication
 
+extension ExportQueueTests {
     @Test func pausesForAuthenticationAndResumesAfterSignIn() async throws {
         defer { cleanUp() }
         let signedInAgain = Locked(false)
@@ -705,7 +733,8 @@ import TestSupport
         await queue.resumeAfterAuthentication()
         await queue.waitUntilFinished()
         #expect(downloader.downloads.current.isEmpty)
-        #expect(await queue.currentSnapshot.jobs[0].state == .completed(destination.url.appendingPathComponent("Book 1 [B000000001].m4b")))
+        #expect(await queue.currentSnapshot.jobs[0]
+            .state == .completed(destination.url.appendingPathComponent("Book 1 [B000000001].m4b")))
     }
 
     @Test func cancelWhileWaitingForAuthentication() async throws {
@@ -735,13 +764,17 @@ import TestSupport
         await queue.waitUntilFinished()
         #expect(await queue.currentSnapshot.jobs[0].state == .cancelled)
     }
+}
 
-    // MARK: Enqueue validation
+// MARK: Enqueue validation
 
+extension ExportQueueTests {
     @Test func rejectsInvalidEnqueues() async throws {
         defer { cleanUp() }
         let (queue, _) = try await makeQueue()
-        await #expect(throws: ExportQueue.StartError.nothingToExport) { try await queue.start([], destination: destination.url) }
+        await #expect(throws: ExportQueue.StartError.nothingToExport) { try await queue.start(
+            [],
+            destination: destination.url) }
         let missing = destination.url.appendingPathComponent("missing")
         await #expect(throws: ExportQueue.StartError.destinationUnavailable(missing.path)) {
             try await queue.start(books(1), destination: missing)

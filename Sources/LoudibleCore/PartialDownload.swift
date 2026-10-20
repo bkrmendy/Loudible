@@ -14,7 +14,12 @@ public struct PartialDownload: Sendable, Equatable, Codable {
     public var checkpoint: DownloadCheckpoint
     public var updatedAt: Date
 
-    public init(book: Audiobook, customerID: String, fileExtension: String, checkpoint: DownloadCheckpoint, updatedAt: Date) {
+    public init(
+        book: Audiobook,
+        customerID: String,
+        fileExtension: String,
+        checkpoint: DownloadCheckpoint,
+        updatedAt: Date) {
         self.version = Self.currentVersion
         self.book = book
         self.customerID = customerID

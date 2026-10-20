@@ -72,7 +72,8 @@ struct ContentView: View {
                 Task { await model.deleteDownload(book) }
             }
         } message: { _ in
-            Text(pendingDeleteIsPartial ? "The next download starts from the beginning." : "The exported M4B is not affected.")
+            Text(pendingDeleteIsPartial ? "The next download starts from the beginning." :
+                "The exported M4B is not affected.")
         }
         .removingToolbarTitle()
         .loginSheet(for: model.session)
